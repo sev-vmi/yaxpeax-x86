@@ -132,6 +132,10 @@ pub(crate) fn regspec_label(spec: &RegSpec) -> &'static str {
     unsafe { REG_NAMES.get_kinda_unchecked((spec.num as u16 + ((spec.bank as u16) << 3)) as usize) }
 }
 
+pub(crate) fn mem_size_label(size: u8) -> &'static str {
+    unsafe { MEM_SIZE_STRINGS.get_kinda_unchecked(size as usize) }
+}
+
 impl fmt::Display for RegSpec {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str(regspec_label(self))
@@ -3415,7 +3419,7 @@ fn contextualize_intel<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors:
         }
 
         if x.is_memory() {
-            out.write_str(MEM_SIZE_STRINGS[instr.mem_size as usize - 1])?;
+            out.write_str(MEM_SIZE_STRINGS[instr.mem_size as usize])?;
             out.write_str(" ")?;
         }
 
@@ -3435,7 +3439,7 @@ fn contextualize_intel<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors:
                             out.write_str(", ")?;
                             let x = Operand::from_spec(instr, instr.operands[i as usize]);
                             if x.is_memory() {
-                                out.write_str(MEM_SIZE_STRINGS[instr.mem_size as usize - 1])?;
+                                out.write_str(MEM_SIZE_STRINGS[instr.mem_size as usize])?;
                                 out.write_str(" ")?;
                             }
                             if let Some(prefix) = instr.segment_override_for_op(i) {

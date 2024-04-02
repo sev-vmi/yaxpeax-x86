@@ -4380,21 +4380,6 @@ impl Instruction {
     /// prefixes.
     pub fn segment_override_for_op(&self, op: u8) -> Option<Segment> {
         match self.opcode {
-            Opcode::STOS |
-            Opcode::SCAS => {
-                if op == 0 {
-                    Some(Segment::ES)
-                } else {
-                    None
-                }
-            }
-            Opcode::LODS => {
-                if op == 1 {
-                    Some(self.prefixes.segment)
-                } else {
-                    None
-                }
-            }
             Opcode::MOVS => {
                 if op == 0 {
                     Some(Segment::ES)
@@ -9002,6 +8987,7 @@ fn read_operands<
         }
         OperandCase::Yb_AL => {
             instruction.regs[0] = RegSpec::al();
+            instruction.prefixes.segment = Segment::ES;
             if instruction.prefixes.address_size() {
                 instruction.regs[1] = RegSpec::edi();
             } else {
@@ -9028,6 +9014,7 @@ fn read_operands<
             let bank = bank_from_prefixes_64(SizeCode::vqp, instruction.prefixes);
             instruction.regs[0].num = 0;
             instruction.regs[0].bank = bank;
+            instruction.prefixes.segment = Segment::ES;
             if instruction.prefixes.address_size() {
                 instruction.regs[1] = RegSpec::edi();
             } else {

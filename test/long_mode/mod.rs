@@ -2751,7 +2751,7 @@ fn only_64bit() {
     test_display(&[0xae], "scas byte es:[rdi], al");
     test_display(&[0xaf], "scas dword es:[rdi], eax");
     test_display(&[0x67, 0xaf], "scas dword es:[edi], eax");
-    test_display(&[0x67, 0xac], "lods al, byte ds:[esi]");
+    test_display(&[0x67, 0xac], "lods al, byte [esi]");
     test_display(&[0x67, 0xaa], "stos byte es:[edi], al");
     // note that rax.b does *not* change the register
     test_display(&[0x4f, 0xa0, 0x12, 0x34, 0x12, 0x34, 0x12, 0x34, 0x12, 0x34], "mov al, byte [0x3412341234123412]");

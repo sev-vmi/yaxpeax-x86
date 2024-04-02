@@ -140,7 +140,8 @@ pub use real_mode::Arch as x86_16;
 
 mod safer_unchecked;
 
-const MEM_SIZE_STRINGS: [&'static str; 64] = [
+const MEM_SIZE_STRINGS: [&'static str; 65] = [
+    "BUG",
     "byte", "word", "BUG", "dword", "ptr", "far", "BUG", "qword",
     "BUG", "mword", "BUG", "BUG", "BUG", "BUG", "BUG", "xmmword",
     "BUG", "BUG", "BUG", "BUG", "BUG", "BUG", "BUG", "BUG",
@@ -194,7 +195,7 @@ impl MemoryAccessSize {
     /// "variable" accesses access a number of bytes dependent on the physical processor and its
     /// operating mode. this is particularly relevant for `xsave`/`xrstor`-style instructions.
     pub fn size_name(&self) -> &'static str {
-        MEM_SIZE_STRINGS[self.size as usize - 1]
+        MEM_SIZE_STRINGS[self.size as usize]
     }
 }
 
