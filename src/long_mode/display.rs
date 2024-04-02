@@ -3862,12 +3862,14 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::St
             write!(out, "lock ")?;
         }
 
-        if [Opcode::MOVS, Opcode::CMPS, Opcode::LODS, Opcode::STOS, Opcode::INS, Opcode::OUTS].contains(&self.opcode) {
-            // only a few of you actually use the prefix...
-            if self.prefixes.rep() {
-                write!(out, "rep ")?;
-            } else if self.prefixes.repnz() {
-                write!(out, "repnz ")?;
+        if self.prefixes.rep_any() {
+            if [Opcode::MOVS, Opcode::CMPS, Opcode::LODS, Opcode::STOS, Opcode::INS, Opcode::OUTS].contains(&self.opcode) {
+                // only a few of you actually use the prefix...
+                if self.prefixes.rep() {
+                    write!(out, "rep ")?;
+                } else if self.prefixes.repnz() {
+                    write!(out, "repnz ")?;
+                }
             }
         }
 
