@@ -84,9 +84,16 @@ if Build.environment.has("perf") then
   measurements["decoded"] = tonumber(insts)
   measurements["elapsed_ms"] = tonumber(ms)
 
-  ipc = measurements["instructions:u"] / measurements["cycles:u"]
+  local instructions_name = "instructions:u"
+  local cycles_name = "cycles:u"
+  if measurements[instructions_name] == nil then
+    instructions_name = "instructions"
+    cycles_name = "cycles"
+  end
+
+  ipc = measurements[instructions_name] / measurements[cycles_name]
   Build.metric("no-fmt IPC", string.format("%.3f", ipc))
-  inst_per_decode = measurements["instructions:u"] / measurements["decoded"]
+  inst_per_decode = measurements[instructions_name] / measurements["decoded"]
   Build.metric("no-fmt instructions/decode", string.format("%.1f", inst_per_decode))
   ms_per_decode = measurements["elapsed_ms"] / measurements["decoded"]
   Build.metric("no-fmt ns/decode", string.format("%.2f", ms_per_decode * 1000000))
@@ -105,9 +112,9 @@ if Build.environment.has("perf") then
   measurements["decoded"] = tonumber(insts)
   measurements["elapsed_ms"] = tonumber(ms)
 
-  ipc = measurements["instructions:u"] / measurements["cycles:u"]
+  ipc = measurements[instructions_name] / measurements[cycles_name]
   Build.metric("fmt IPC", string.format("%.3f", ipc))
-  inst_per_decode = measurements["instructions:u"] / measurements["decoded"]
+  inst_per_decode = measurements[instructions_name] / measurements["decoded"]
   Build.metric("fmt instructions/decode", string.format("%.1f", inst_per_decode))
   ms_per_decode = measurements["elapsed_ms"] / measurements["decoded"]
   Build.metric("fmt ns/decode", string.format("%.2f", ms_per_decode * 1000000))
