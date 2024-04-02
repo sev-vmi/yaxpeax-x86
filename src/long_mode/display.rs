@@ -349,6 +349,257 @@ impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for Operand {
     }
 }
 
+struct ColorizingOperandVisitor<'a, T, Y> {
+    instr: &'a Instruction,
+    op_nr: u8,
+    colors: &'a Y,
+    f: &'a mut T,
+}
+
+impl <T: fmt::Write, Y: YaxColors> crate::long_mode::OperandVisitor for ColorizingOperandVisitor<'_, T, Y> {
+    type Ok = ();
+    type Error = core::fmt::Error;
+
+    fn visit_u8(&mut self, imm: u8) -> Result<Self::Ok, Self::Error> {
+        write!(self.f, "{}", self.colors.number(u8_hex(imm)))
+    }
+    fn visit_i8(&mut self, imm: i8) -> Result<Self::Ok, Self::Error> {
+        write!(self.f, "{}",
+            self.colors.number(signed_i8_hex(imm)))
+    }
+    fn visit_u16(&mut self, imm: u16) -> Result<Self::Ok, Self::Error> {
+        write!(self.f, "{}", self.colors.number(u16_hex(imm)))
+    }
+    fn visit_i16(&mut self, imm: i16) -> Result<Self::Ok, Self::Error> {
+        write!(self.f, "{}",
+            self.colors.number(signed_i16_hex(imm)))
+    }
+    fn visit_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
+        write!(self.f, "{}", self.colors.number(u32_hex(imm)))
+    }
+    fn visit_i32(&mut self, imm: i32) -> Result<Self::Ok, Self::Error> {
+        write!(self.f, "{}",
+            self.colors.number(signed_i32_hex(imm)))
+    }
+    fn visit_u64(&mut self, imm: u64) -> Result<Self::Ok, Self::Error> {
+        write!(self.f, "{}", self.colors.number(u64_hex(imm)))
+    }
+    fn visit_i64(&mut self, imm: i64) -> Result<Self::Ok, Self::Error> {
+        write!(self.f, "{}",
+            self.colors.number(signed_i64_hex(imm)))
+    }
+    fn visit_reg(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(regspec_label(&reg))
+    }
+    fn visit_reg_mask_merge(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(regspec_label(&spec))?;
+        if mask.num != 0 {
+            self.f.write_str("{")?;
+            self.f.write_str(regspec_label(&mask))?;
+            self.f.write_str("}")?;
+        }
+        if let MergeMode::Zero = merge_mode {
+            self.f.write_str("{z}")?;
+        }
+        Ok(())
+    }
+    fn visit_reg_mask_merge_sae(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode, sae_mode: crate::long_mode::SaeMode) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(regspec_label(&spec))?;
+        if mask.num != 0 {
+            self.f.write_str("{")?;
+            self.f.write_str(regspec_label(&mask))?;
+            self.f.write_str("}")?;
+        }
+        if let MergeMode::Zero = merge_mode {
+            self.f.write_str("{z}")?;
+        }
+        self.f.write_str(sae_mode.label())?;
+        Ok(())
+    }
+    fn visit_reg_mask_merge_sae_noround(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(regspec_label(&spec))?;
+        if mask.num != 0 {
+            self.f.write_str("{")?;
+            self.f.write_str(regspec_label(&mask))?;
+            self.f.write_str("}")?;
+        }
+        if let MergeMode::Zero = merge_mode {
+            self.f.write_str("{z}")?;
+        }
+        self.f.write_str("{sae}")?;
+        Ok(())
+    }
+    fn visit_abs_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
+        self.f.write_str(" ")?;
+        if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
+            write!(self.f, "{}:", prefix)?;
+        }
+        write!(self.f, "[{}]", self.colors.address(u32_hex(imm)))
+    }
+    fn visit_abs_u64(&mut self, imm: u64) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
+        self.f.write_str(" ")?;
+        if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
+            write!(self.f, "{}:", prefix)?;
+        }
+        write!(self.f, "[{}]", self.colors.address(u64_hex(imm)))
+    }
+    fn visit_disp(&mut self, reg: RegSpec, disp: i32) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
+        self.f.write_str(" ")?;
+        if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
+            write!(self.f, "{}:", prefix)?;
+        }
+        write!(self.f, "[{} ", regspec_label(&reg))?;
+        format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
+        write!(self.f, "]")
+    }
+    fn visit_deref(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
+        self.f.write_str(" ")?;
+        if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
+            write!(self.f, "{}:", prefix)?;
+        }
+        self.f.write_str("[")?;
+        self.f.write_str(regspec_label(&reg))?;
+        self.f.write_str("]")
+    }
+    fn visit_reg_scale(&mut self, reg: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
+        self.f.write_str(" ")?;
+        if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
+            write!(self.f, "{}:", prefix)?;
+        }
+        write!(self.f, "[{} * {}]",
+            regspec_label(&reg),
+            self.colors.number(scale)
+        )
+    }
+    fn visit_reg_scale_disp(&mut self, reg: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
+        self.f.write_str(" ")?;
+        if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
+            write!(self.f, "{}:", prefix)?;
+        }
+        write!(self.f, "[{} * {} ",
+            regspec_label(&reg),
+            self.colors.number(scale),
+        )?;
+        format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
+        write!(self.f, "]")
+    }
+    fn visit_index_base_scale(&mut self, base: RegSpec, index: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
+        self.f.write_str(" ")?;
+        if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
+            write!(self.f, "{}:", prefix)?;
+        }
+        write!(self.f, "[{} + {} * {}]",
+            regspec_label(&base),
+            regspec_label(&index),
+            self.colors.number(scale)
+        )
+    }
+    fn visit_index_base_scale_disp(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
+        self.f.write_str(" ")?;
+        if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
+            write!(self.f, "{}:", prefix)?;
+        }
+        write!(self.f, "[{} + {} * {} ",
+            regspec_label(&base),
+            regspec_label(&index),
+            self.colors.number(scale),
+        )?;
+        format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
+        write!(self.f, "]")
+    }
+    fn visit_reg_disp_masked(&mut self, spec: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
+        self.f.write_str(" ")?;
+        write!(self.f, "[{} ", regspec_label(&spec))?;
+        format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
+        write!(self.f, "]")?;
+        write!(self.f, "{{{}}}", regspec_label(&mask_reg))
+    }
+    fn visit_reg_deref_masked(&mut self, spec: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
+        self.f.write_str(" ")?;
+        self.f.write_str("[")?;
+        self.f.write_str(regspec_label(&spec))?;
+        self.f.write_str("]")?;
+        write!(self.f, "{{{}}}", regspec_label(&mask_reg))
+    }
+    fn visit_reg_scale_masked(&mut self, spec: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
+        self.f.write_str(" ")?;
+        write!(self.f, "[{} * {}]",
+            regspec_label(&spec),
+            self.colors.number(scale)
+        )?;
+        write!(self.f, "{{{}}}", regspec_label(&mask_reg))
+    }
+    fn visit_reg_scale_disp_masked(&mut self, spec: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
+        self.f.write_str(" ")?;
+        write!(self.f, "[{} * {} ",
+            regspec_label(&spec),
+            self.colors.number(scale),
+        )?;
+        format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
+        write!(self.f, "]")?;
+        write!(self.f, "{{{}}}", regspec_label(&mask_reg))
+    }
+    fn visit_index_base_masked(&mut self, base: RegSpec, index: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
+        self.f.write_str(" ")?;
+        self.f.write_str("[")?;
+        self.f.write_str(regspec_label(&base))?;
+        self.f.write_str(" + ")?;
+        self.f.write_str(regspec_label(&index))?;
+        self.f.write_str("]")?;
+        write!(self.f, "{{{}}}", regspec_label(&mask_reg))
+    }
+    fn visit_index_base_disp_masked(&mut self, base: RegSpec, index: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
+        self.f.write_str(" ")?;
+        write!(self.f, "[{} + {} ",
+            regspec_label(&base),
+            regspec_label(&index),
+        )?;
+        format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
+        write!(self.f, "]")?;
+        write!(self.f, "{{{}}}", regspec_label(&mask_reg))
+    }
+    fn visit_index_base_scale_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
+        self.f.write_str(" ")?;
+        write!(self.f, "[{} + {} * {}]",
+            regspec_label(&base),
+            regspec_label(&index),
+            self.colors.number(scale)
+        )?;
+        write!(self.f, "{{{}}}", regspec_label(&mask_reg))
+    }
+    fn visit_index_base_scale_disp_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
+        self.f.write_str(" ")?;
+        write!(self.f, "[{} + {} * {} ",
+            regspec_label(&base),
+            regspec_label(&index),
+            self.colors.number(scale),
+        )?;
+        format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
+        write!(self.f, "]")?;
+        write!(self.f, "{{{}}}", regspec_label(&mask_reg))
+    }
+
+    fn visit_other(&mut self) -> Result<Self::Ok, Self::Error> {
+        Ok(())
+    }
+}
+
 impl fmt::Display for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str(self.name())
@@ -3381,8 +3632,6 @@ fn contextualize_intel<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors:
     if instr.operand_count > 0 {
         out.write_str(" ")?;
 
-        let x = Operand::from_spec(instr, instr.operands[0]);
-
         const RELATIVE_BRANCHES: [Opcode; 21] = [
             Opcode::JMP, Opcode::JRCXZ,
             Opcode::LOOP, Opcode::LOOPZ, Opcode::LOOPNZ,
@@ -3398,6 +3647,8 @@ fn contextualize_intel<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors:
 
         if instr.operands[0] == OperandSpec::ImmI8 || instr.operands[0] == OperandSpec::ImmI32 {
             if RELATIVE_BRANCHES.contains(&instr.opcode) {
+                let x = Operand::from_spec(instr, instr.operands[0]);
+
                 return match x {
                     Operand::ImmediateI8(rel) => {
                         if rel >= 0 {
@@ -3418,15 +3669,13 @@ fn contextualize_intel<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors:
             }
         }
 
-        if x.is_memory() {
-            out.write_str(MEM_SIZE_STRINGS[instr.mem_size as usize])?;
-            out.write_str(" ")?;
-        }
-
-        if let Some(prefix) = instr.segment_override_for_op(0) {
-            write!(out, "{}:", prefix)?;
-        }
-        x.colorize(colors, out)?;
+        let mut displayer = ColorizingOperandVisitor {
+            instr,
+            op_nr: 0,
+            f: out,
+            colors,
+        };
+        instr.visit_operand(0 as u8, &mut displayer)?;
 
         for i in 1..instr.operand_count {
             match instr.opcode {
@@ -3437,16 +3686,15 @@ fn contextualize_intel<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors:
                         },
                         _ => {
                             out.write_str(", ")?;
-                            let x = Operand::from_spec(instr, instr.operands[i as usize]);
-                            if x.is_memory() {
-                                out.write_str(MEM_SIZE_STRINGS[instr.mem_size as usize])?;
-                                out.write_str(" ")?;
-                            }
-                            if let Some(prefix) = instr.segment_override_for_op(i) {
-                                write!(out, "{}:", prefix)?;
-                            }
-                            x.colorize(colors, out)?;
+                            let mut displayer = ColorizingOperandVisitor {
+                                instr,
+                                op_nr: i,
+                                f: out,
+                                colors,
+                            };
+                            instr.visit_operand(i as u8, &mut displayer)?;
                             if let Some(evex) = instr.prefixes.evex() {
+                                let x = Operand::from_spec(instr, instr.operands[i as usize]);
                                 if evex.broadcast() && x.is_memory() {
                                     let scale = if instr.opcode == Opcode::VCVTPD2PS || instr.opcode == Opcode::VCVTTPD2UDQ || instr.opcode == Opcode::VCVTPD2UDQ || instr.opcode == Opcode::VCVTUDQ2PD || instr.opcode == Opcode::VCVTPS2PD || instr.opcode == Opcode::VCVTQQ2PS || instr.opcode == Opcode::VCVTDQ2PD || instr.opcode == Opcode::VCVTTPD2DQ || instr.opcode == Opcode::VFPCLASSPS || instr.opcode == Opcode::VFPCLASSPD || instr.opcode == Opcode::VCVTNEPS2BF16 || instr.opcode == Opcode::VCVTUQQ2PS || instr.opcode == Opcode::VCVTPD2DQ || instr.opcode == Opcode::VCVTTPS2UQQ || instr.opcode == Opcode::VCVTPS2UQQ || instr.opcode == Opcode::VCVTTPS2QQ || instr.opcode == Opcode::VCVTPS2QQ {
                                         if instr.opcode == Opcode::VFPCLASSPS || instr.opcode ==  Opcode::VCVTNEPS2BF16 {
@@ -3889,8 +4137,14 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::St
                         }
                     }
                 }
-                let x = Operand::from_spec(self, self.operands[0]);
-                x.colorize(colors, out)?;
+
+                let mut displayer = ColorizingOperandVisitor {
+                    instr: self,
+                    op_nr: 0,
+                    f: out,
+                    colors,
+                };
+                self.visit_operand(0, &mut displayer)?;
             }
         };
         for i in 1..self.operand_count {
@@ -3904,11 +4158,13 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::St
                         },
                         _ => {
                             write!(out, ", ")?;
-                            if let Some(prefix) = self.segment_override_for_op(1) {
-                                write!(out, "{}:", prefix)?;
-                            }
-                            let x = Operand::from_spec(self, self.operands[i]);
-                            x.colorize(colors, out)?
+                            let mut displayer = ColorizingOperandVisitor {
+                                instr: self,
+                                op_nr: i as u8,
+                                f: out,
+                                colors,
+                            };
+                            self.visit_operand(i as u8, &mut displayer)?;
                         }
                     }
                 }

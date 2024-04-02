@@ -541,6 +541,43 @@ impl SaeMode {
         SAE_MODES[idx]
     }
 }
+
+pub trait OperandVisitor {
+    type Ok;
+    type Error;
+
+    fn visit_reg(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+    fn visit_deref(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+    fn visit_disp(&mut self, reg: RegSpec, disp: i32) -> Result<Self::Ok, Self::Error>;
+    fn visit_reg_scale(&mut self, reg: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error>;
+    fn visit_index_base_scale(&mut self, base: RegSpec, index: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error>;
+    fn visit_index_base_scale_disp(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error>;
+    fn visit_reg_scale_disp(&mut self, reg: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error>;
+    fn visit_i8(&mut self, imm: i8) -> Result<Self::Ok, Self::Error>;
+    fn visit_u8(&mut self, imm: u8) -> Result<Self::Ok, Self::Error>;
+    fn visit_i16(&mut self, imm: i16) -> Result<Self::Ok, Self::Error>;
+    fn visit_u16(&mut self, imm: u16) -> Result<Self::Ok, Self::Error>;
+    fn visit_i32(&mut self, imm: i32) -> Result<Self::Ok, Self::Error>;
+    fn visit_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error>;
+    fn visit_i64(&mut self, imm: i64) -> Result<Self::Ok, Self::Error>;
+    fn visit_u64(&mut self, imm: u64) -> Result<Self::Ok, Self::Error>;
+    fn visit_abs_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error>;
+    fn visit_abs_u64(&mut self, imm: u64) -> Result<Self::Ok, Self::Error>;
+    fn visit_reg_mask_merge(&mut self, base: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error>;
+    fn visit_reg_mask_merge_sae(&mut self, base: RegSpec, mask: RegSpec, merge_mode: MergeMode, sae_mode: SaeMode) -> Result<Self::Ok, Self::Error>;
+    fn visit_reg_mask_merge_sae_noround(&mut self, base: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error>;
+    fn visit_reg_disp_masked(&mut self, base: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+    fn visit_reg_deref_masked(&mut self, base: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+    fn visit_reg_scale_masked(&mut self, base: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+    fn visit_reg_scale_disp_masked(&mut self, base: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+    fn visit_index_base_masked(&mut self, base: RegSpec, index: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+    fn visit_index_base_disp_masked(&mut self, base: RegSpec, index: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+    fn visit_index_base_scale_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+    fn visit_index_base_scale_disp_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+
+    fn visit_other(&mut self) -> Result<Self::Ok, Self::Error>;
+}
+
 impl Operand {
     fn from_spec(inst: &Instruction, spec: OperandSpec) -> Operand {
         match spec {
@@ -4321,6 +4358,168 @@ impl Instruction {
     pub fn operand(&self, i: u8) -> Operand {
         assert!(i < 4);
         Operand::from_spec(self, self.operands[i as usize])
+    }
+
+    /// TODO: make public, document, etc...
+    ///
+    /// `visit_operand` allows code using operands to better specialize and inline with the logic
+    /// that would construct an [`Operand`] variant, without having to necessarily construct an
+    /// `Operand` (including the attendant move of the enum).
+    ///
+    /// if the work you expect to do per-operand is very small, constructing an `Operand` and
+    /// dispatching on tags may be a substantial factor of overall runtime. `visit_operand` can
+    /// reduce total overhead in such cases.
+    fn visit_operand<T: OperandVisitor>(&self, i: u8, visitor: &mut T) -> Result<T::Ok, T::Error> {
+        assert!(i < 4);
+        let spec = self.operands[i as usize];
+        match spec {
+            OperandSpec::Nothing => {
+                visitor.visit_other()
+            }
+            OperandSpec::RegRRR => {
+                visitor.visit_reg(self.regs[0])
+            }
+            OperandSpec::RegMMM => {
+                visitor.visit_reg(self.regs[1])
+            }
+            OperandSpec::RegVex => {
+                visitor.visit_reg(self.regs[3])
+            }
+            OperandSpec::Reg4 => {
+                visitor.visit_reg(RegSpec { num: self.imm as u8, bank: self.regs[3].bank })
+            }
+            OperandSpec::Deref => {
+                visitor.visit_deref(self.regs[1])
+            }
+            OperandSpec::Deref_esi => {
+//                visitor.visit_other()
+                visitor.visit_deref(RegSpec::esi())
+            }
+            OperandSpec::Deref_edi => {
+//                visitor.visit_other()
+                visitor.visit_deref(RegSpec::edi())
+            }
+            OperandSpec::Deref_rsi => {
+//                visitor.visit_other()
+                visitor.visit_deref(RegSpec::rsi())
+            }
+            OperandSpec::Deref_rdi => {
+//                visitor.visit_other()
+                visitor.visit_deref(RegSpec::rdi())
+            }
+            OperandSpec::RegDisp => {
+                visitor.visit_disp(self.regs[1], self.disp as i32)
+            }
+            OperandSpec::RegRRR_maskmerge => {
+                visitor.visit_reg_mask_merge(
+                    self.regs[0],
+                    RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()),
+                    MergeMode::from(self.prefixes.evex_unchecked().merge()),
+                )
+            }
+            OperandSpec::RegRRR_maskmerge_sae => {
+                visitor.visit_reg_mask_merge_sae(
+                    self.regs[0],
+                    RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()),
+                    MergeMode::from(self.prefixes.evex_unchecked().merge()),
+                    SaeMode::from(self.prefixes.evex_unchecked().vex().l(), self.prefixes.evex_unchecked().lp()),
+                )
+            }
+            OperandSpec::RegRRR_maskmerge_sae_noround => {
+                visitor.visit_reg_mask_merge_sae_noround(
+                    self.regs[0],
+                    RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()),
+                    MergeMode::from(self.prefixes.evex_unchecked().merge()),
+                )
+            }
+            OperandSpec::RegMMM_maskmerge => {
+                visitor.visit_reg_mask_merge(
+                    self.regs[1],
+                    RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()),
+                    MergeMode::from(self.prefixes.evex_unchecked().merge()),
+                )
+            }
+            OperandSpec::RegMMM_maskmerge_sae_noround => {
+                visitor.visit_reg_mask_merge_sae_noround(
+                    self.regs[1],
+                    RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()),
+                    MergeMode::from(self.prefixes.evex_unchecked().merge()),
+                )
+            }
+            OperandSpec::RegVex_maskmerge => {
+                visitor.visit_reg_mask_merge(
+                    self.regs[3],
+                    RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()),
+                    MergeMode::from(self.prefixes.evex_unchecked().merge()),
+                )
+            }
+            OperandSpec::ImmI8 => visitor.visit_i8(self.imm as i8),
+            OperandSpec::ImmU8 => visitor.visit_u8(self.imm as u8),
+            OperandSpec::ImmI16 => visitor.visit_i16(self.imm as i16),
+            OperandSpec::ImmU16 => visitor.visit_u16(self.imm as u16),
+            OperandSpec::ImmI32 => visitor.visit_i32(self.imm as i32),
+            OperandSpec::ImmI64 => visitor.visit_i64(self.imm as i64),
+            OperandSpec::ImmInDispField => visitor.visit_u16(self.disp as u16),
+            OperandSpec::DispU32 => visitor.visit_abs_u32(self.disp as u32),
+            OperandSpec::DispU64 => visitor.visit_abs_u64(self.disp as u64),
+            OperandSpec::RegScale => {
+                visitor.visit_reg_scale(self.regs[2], self.scale)
+            }
+            OperandSpec::RegScaleDisp => {
+                visitor.visit_reg_scale_disp(self.regs[2], self.scale, self.disp as i32)
+            }
+            OperandSpec::RegIndexBaseScale => {
+                visitor.visit_index_base_scale(self.regs[1], self.regs[2], self.scale)
+                    /*
+                Operand::RegIndexBaseScale(self.regs[1], self.regs[2], self.scale)
+                */
+            }
+            OperandSpec::RegIndexBaseScaleDisp => {
+                visitor.visit_index_base_scale_disp(self.regs[1], self.regs[2], self.scale, self.disp as i32)
+            }
+            OperandSpec::Deref_mask => {
+                if self.prefixes.evex_unchecked().mask_reg() != 0 {
+                    visitor.visit_reg_deref_masked(self.regs[1], RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
+                } else {
+                    visitor.visit_deref(self.regs[1])
+                }
+            }
+            OperandSpec::RegDisp_mask => {
+                if self.prefixes.evex_unchecked().mask_reg() != 0 {
+                    visitor.visit_reg_disp_masked(self.regs[1], self.disp as i32, RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
+                } else {
+                    visitor.visit_disp(self.regs[1], self.disp as i32)
+                }
+            }
+            OperandSpec::RegScale_mask => {
+                if self.prefixes.evex_unchecked().mask_reg() != 0 {
+                    visitor.visit_reg_scale_masked(self.regs[2], self.scale, RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
+                } else {
+                    visitor.visit_reg_scale(self.regs[2], self.scale)
+                }
+            }
+            OperandSpec::RegScaleDisp_mask => {
+                if self.prefixes.evex_unchecked().mask_reg() != 0 {
+                    visitor.visit_reg_scale_disp_masked(self.regs[2], self.scale, self.disp as i32, RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
+                } else {
+                    visitor.visit_reg_scale_disp(self.regs[2], self.scale, self.disp as i32)
+                }
+            }
+            OperandSpec::RegIndexBaseScale_mask => {
+                if self.prefixes.evex_unchecked().mask_reg() != 0 {
+                    visitor.visit_index_base_scale_masked(self.regs[1], self.regs[2], self.scale, RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
+                } else {
+                    visitor.visit_index_base_scale(self.regs[1], self.regs[2], self.scale)
+                }
+            }
+            OperandSpec::RegIndexBaseScaleDisp_mask => {
+                if self.prefixes.evex_unchecked().mask_reg() != 0 {
+                    visitor.visit_index_base_scale_disp_masked(self.regs[1], self.regs[2], self.scale, self.disp as i32, RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
+                } else {
+                    visitor.visit_index_base_scale_disp(self.regs[1], self.regs[2], self.scale, self.disp as i32)
+                }
+            }
+        }
     }
 
     /// get the number of operands in this instruction. useful in iterating an instruction's
