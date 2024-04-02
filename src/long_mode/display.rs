@@ -449,11 +449,14 @@ impl <T: fmt::Write, Y: YaxColors> crate::long_mode::OperandVisitor for Colorizi
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
         self.f.write_str(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
-            write!(self.f, "{}:", prefix)?;
+            write!(self.f, "{}", prefix)?;
+            self.f.write_str(":")?;
         }
-        write!(self.f, "[{} ", regspec_label(&reg))?;
+        self.f.write_str("[")?;
+        self.f.write_str(regspec_label(&reg))?;
+        self.f.write_str(" ")?;
         format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-        write!(self.f, "]")
+        self.f.write_str("]")
     }
     fn visit_deref(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
