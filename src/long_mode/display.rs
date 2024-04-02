@@ -3681,72 +3681,63 @@ fn contextualize_intel<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors:
         instr.visit_operand(0 as u8, &mut displayer)?;
 
         for i in 1..instr.operand_count {
-            match instr.opcode {
-                _ => {
-                    match &instr.operands[i as usize] {
-                        &OperandSpec::Nothing => {
-                            return Ok(());
-                        },
-                        _ => {
-                            out.write_str(", ")?;
-                            let mut displayer = ColorizingOperandVisitor {
-                                instr,
-                                op_nr: i,
-                                f: out,
-                                colors,
-                            };
-                            instr.visit_operand(i as u8, &mut displayer)?;
-                            if let Some(evex) = instr.prefixes.evex() {
-                                let x = Operand::from_spec(instr, instr.operands[i as usize]);
-                                if evex.broadcast() && x.is_memory() {
-                                    let scale = if instr.opcode == Opcode::VCVTPD2PS || instr.opcode == Opcode::VCVTTPD2UDQ || instr.opcode == Opcode::VCVTPD2UDQ || instr.opcode == Opcode::VCVTUDQ2PD || instr.opcode == Opcode::VCVTPS2PD || instr.opcode == Opcode::VCVTQQ2PS || instr.opcode == Opcode::VCVTDQ2PD || instr.opcode == Opcode::VCVTTPD2DQ || instr.opcode == Opcode::VFPCLASSPS || instr.opcode == Opcode::VFPCLASSPD || instr.opcode == Opcode::VCVTNEPS2BF16 || instr.opcode == Opcode::VCVTUQQ2PS || instr.opcode == Opcode::VCVTPD2DQ || instr.opcode == Opcode::VCVTTPS2UQQ || instr.opcode == Opcode::VCVTPS2UQQ || instr.opcode == Opcode::VCVTTPS2QQ || instr.opcode == Opcode::VCVTPS2QQ {
-                                        if instr.opcode == Opcode::VFPCLASSPS || instr.opcode ==  Opcode::VCVTNEPS2BF16 {
-                                            if evex.vex().l() {
-                                                8
-                                            } else if evex.lp() {
-                                                16
-                                            } else {
-                                                4
-                                            }
-                                        } else if instr.opcode == Opcode::VFPCLASSPD {
-                                            if evex.vex().l() {
-                                                4
-                                            } else if evex.lp() {
-                                                8
-                                            } else {
-                                                2
-                                            }
-                                        } else {
-                                            // vcvtpd2ps is "cool": in broadcast mode, it can read a
-                                            // double-precision float (qword), resize to single-precision,
-                                            // then broadcast that to the whole destination register. this
-                                            // means we need to show `xmm, qword [addr]{1to4}` if vector
-                                            // size is 256. likewise, scale of 8 for the same truncation
-                                            // reason if vector size is 512.
-                                            // vcvtudq2pd is the same story.
-                                            // vfpclassp{s,d} is a mystery to me.
-                                            if evex.vex().l() {
-                                                4
-                                            } else if evex.lp() {
-                                                8
-                                            } else {
-                                                2
-                                            }
-                                        }
-                                    } else {
-                                        // this should never be `None` - that would imply two
-                                        // memory operands for a broadcasted operation.
-                                        if let Some(width) = Operand::from_spec(instr, instr.operands[i as usize - 1]).width() {
-                                            width / instr.mem_size
-                                        } else {
-                                            0
-                                        }
-                                    };
-                                    write!(out, "{{1to{}}}", scale)?;
-                                }
+            // don't worry about checking for `instr.operands[i] != Nothing`, it would be a bug to
+            // reach that while iterating only to `operand_count`..
+            out.write_str(", ")?;
+            let mut displayer = ColorizingOperandVisitor {
+                instr,
+                op_nr: i,
+                f: out,
+                colors,
+            };
+            instr.visit_operand(i as u8, &mut displayer)?;
+            if let Some(evex) = instr.prefixes.evex() {
+                let x = Operand::from_spec(instr, instr.operands[i as usize]);
+                if evex.broadcast() && x.is_memory() {
+                    let scale = if instr.opcode == Opcode::VCVTPD2PS || instr.opcode == Opcode::VCVTTPD2UDQ || instr.opcode == Opcode::VCVTPD2UDQ || instr.opcode == Opcode::VCVTUDQ2PD || instr.opcode == Opcode::VCVTPS2PD || instr.opcode == Opcode::VCVTQQ2PS || instr.opcode == Opcode::VCVTDQ2PD || instr.opcode == Opcode::VCVTTPD2DQ || instr.opcode == Opcode::VFPCLASSPS || instr.opcode == Opcode::VFPCLASSPD || instr.opcode == Opcode::VCVTNEPS2BF16 || instr.opcode == Opcode::VCVTUQQ2PS || instr.opcode == Opcode::VCVTPD2DQ || instr.opcode == Opcode::VCVTTPS2UQQ || instr.opcode == Opcode::VCVTPS2UQQ || instr.opcode == Opcode::VCVTTPS2QQ || instr.opcode == Opcode::VCVTPS2QQ {
+                        if instr.opcode == Opcode::VFPCLASSPS || instr.opcode ==  Opcode::VCVTNEPS2BF16 {
+                            if evex.vex().l() {
+                                8
+                            } else if evex.lp() {
+                                16
+                            } else {
+                                4
+                            }
+                        } else if instr.opcode == Opcode::VFPCLASSPD {
+                            if evex.vex().l() {
+                                4
+                            } else if evex.lp() {
+                                8
+                            } else {
+                                2
+                            }
+                        } else {
+                            // vcvtpd2ps is "cool": in broadcast mode, it can read a
+                            // double-precision float (qword), resize to single-precision,
+                            // then broadcast that to the whole destination register. this
+                            // means we need to show `xmm, qword [addr]{1to4}` if vector
+                            // size is 256. likewise, scale of 8 for the same truncation
+                            // reason if vector size is 512.
+                            // vcvtudq2pd is the same story.
+                            // vfpclassp{s,d} is a mystery to me.
+                            if evex.vex().l() {
+                                4
+                            } else if evex.lp() {
+                                8
+                            } else {
+                                2
                             }
                         }
-                    }
+                    } else {
+                        // this should never be `None` - that would imply two
+                        // memory operands for a broadcasted operation.
+                        if let Some(width) = Operand::from_spec(instr, instr.operands[i as usize - 1]).width() {
+                            width / instr.mem_size
+                        } else {
+                            0
+                        }
+                    };
+                    write!(out, "{{1to{}}}", scale)?;
                 }
             }
         }
