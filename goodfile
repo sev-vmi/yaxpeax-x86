@@ -115,7 +115,7 @@ if Build.environment.has("perf") then
   ipc = measurements[instructions_name] / measurements[cycles_name]
   Build.metric("fmt IPC", string.format("%.3f", ipc))
   inst_per_decode = measurements[instructions_name] / measurements["decoded"]
-  Build.metric("fmt instructions/decode", string.format("%.1f", inst_per_decode))
+  Build.metric("fmt instructions/decode+display", string.format("%.1f", inst_per_decode))
   ms_per_decode = measurements["elapsed_ms"] / measurements["decoded"]
-  Build.metric("fmt ns/decode", string.format("%.2f", ms_per_decode * 1000000))
+  Build.metric("fmt ns/decode+display", string.format("%.2f", ms_per_decode * 1000000))
 end
