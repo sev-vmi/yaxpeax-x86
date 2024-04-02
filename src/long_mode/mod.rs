@@ -4400,8 +4400,8 @@ impl Instruction {
             },
             _ => {
                 // most operands are pretty simple:
-                if self.operands[op as usize].is_memory() &&
-                    self.prefixes.segment != Segment::DS {
+                if self.prefixes.segment != Segment::DS &&
+                    self.operands[op as usize].is_memory() {
                     Some(self.prefixes.segment)
                 } else {
                     None
