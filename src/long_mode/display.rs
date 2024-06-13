@@ -638,6 +638,13 @@ const MNEMONICS: &[&'static str] = &[
     "not",
     "xadd",
     "xchg",
+    "cmps",
+    "scas",
+    "movs",
+    "lods",
+    "stos",
+    "ins",
+    "outs",
     "invalid",
     "bt",
     "bsf",
@@ -719,17 +726,10 @@ const MNEMONICS: &[&'static str] = &[
     "cwd",
     "cdq",
     "cqo",
-    "lods",
-    "stos",
     "lahf",
     "sahf",
-    "cmps",
-    "scas",
-    "movs",
     "test",
-    "ins",
     "in",
-    "outs",
     "out",
     "imul",
     "jo",
@@ -3613,7 +3613,7 @@ fn contextualize_intel<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors:
     }
 
     if instr.prefixes.rep_any() {
-        if [Opcode::MOVS, Opcode::CMPS, Opcode::LODS, Opcode::STOS, Opcode::INS, Opcode::OUTS].contains(&instr.opcode) {
+        if instr.opcode.can_rep() {
             if instr.prefixes.rep() {
                 write!(out, "rep ")?;
             } else if instr.prefixes.repnz() {
@@ -3769,7 +3769,7 @@ fn contextualize_c<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors: &Y,
     }
 
     if instr.prefixes.rep_any() {
-        if [Opcode::MOVS, Opcode::CMPS, Opcode::LODS, Opcode::STOS, Opcode::INS, Opcode::OUTS].contains(&instr.opcode) {
+        if instr.opcode.can_rep() {
             let word_str = match instr.mem_size {
                 1 => "byte",
                 2 => "word",

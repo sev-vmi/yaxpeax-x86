@@ -1101,7 +1101,16 @@ pub enum Opcode {
     NOT = 0x1019,
     XADD = 0x101a,
     XCHG = 0x101b,
-    Invalid = 0x1c,
+
+    CMPS = 0x201c,
+    SCAS = 0x201d,
+    MOVS = 0x201e,
+    LODS = 0x201f,
+    STOS = 0x2020,
+    INS = 0x2021,
+    OUTS = 0x2022,
+
+    Invalid = 0x23,
 //    XADD,
     BT,
 //    BTS,
@@ -1186,17 +1195,10 @@ pub enum Opcode {
     CWD,
     CDQ,
     CQO,
-    LODS,
-    STOS,
     LAHF,
     SAHF,
-    CMPS,
-    SCAS,
-    MOVS,
     TEST,
-    INS,
     IN,
-    OUTS,
     OUT,
     IMUL,
     JO,
@@ -4338,6 +4340,16 @@ impl Opcode {
             _ => None,
         }
     }
+
+    #[inline(always)]
+    fn can_lock(&self) -> bool {
+        (*self as u32) & 0x1000 != 0
+    }
+
+    #[inline(always)]
+    fn can_rep(&self) -> bool {
+        (*self as u32) & 0x2000 != 0
+    }
 }
 
 impl Default for Instruction {
@@ -6835,7 +6847,7 @@ fn read_with_annotations<
     self.read_operands(decoder, words, instruction, record, sink)?;
 
     if self.check_lock {
-        if (instruction.opcode as u32) < 0x1000 || !instruction.operands[0].is_memory() {
+        if !instruction.opcode.can_lock() || !instruction.operands[0].is_memory() {
             return Err(DecodeError::InvalidPrefixes);
         }
     }
