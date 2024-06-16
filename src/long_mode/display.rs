@@ -446,7 +446,10 @@ impl <T: fmt::Write, Y: YaxColors> crate::long_mode::OperandVisitor for Colorizi
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
         self.f.write_str(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
-            write!(self.f, "{}:", prefix)?;
+            let name = prefix.name();
+            self.f.write_char(name[0] as char)?;
+            self.f.write_char(name[1] as char)?;
+            self.f.write_char(':')?;
         }
         write!(self.f, "[{}]", self.colors.address(u32_hex(imm)))
     }
@@ -454,7 +457,10 @@ impl <T: fmt::Write, Y: YaxColors> crate::long_mode::OperandVisitor for Colorizi
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
         self.f.write_str(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
-            write!(self.f, "{}:", prefix)?;
+            let name = prefix.name();
+            self.f.write_char(name[0] as char)?;
+            self.f.write_char(name[1] as char)?;
+            self.f.write_char(':')?;
         }
         write!(self.f, "[{}]", self.colors.address(u64_hex(imm)))
     }
@@ -462,8 +468,10 @@ impl <T: fmt::Write, Y: YaxColors> crate::long_mode::OperandVisitor for Colorizi
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
         self.f.write_str(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
-            write!(self.f, "{}", prefix)?;
-            self.f.write_str(":")?;
+            let name = prefix.name();
+            self.f.write_char(name[0] as char)?;
+            self.f.write_char(name[1] as char)?;
+            self.f.write_char(':')?;
         }
         self.f.write_str("[")?;
         self.f.write_str(regspec_label(&reg))?;
@@ -475,7 +483,10 @@ impl <T: fmt::Write, Y: YaxColors> crate::long_mode::OperandVisitor for Colorizi
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
         self.f.write_str(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
-            write!(self.f, "{}:", prefix)?;
+            let name = prefix.name();
+            self.f.write_char(name[0] as char)?;
+            self.f.write_char(name[1] as char)?;
+            self.f.write_char(':')?;
         }
         self.f.write_str("[")?;
         self.f.write_str(regspec_label(&reg))?;
@@ -485,7 +496,10 @@ impl <T: fmt::Write, Y: YaxColors> crate::long_mode::OperandVisitor for Colorizi
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
         self.f.write_str(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
-            write!(self.f, "{}:", prefix)?;
+            let name = prefix.name();
+            self.f.write_char(name[0] as char)?;
+            self.f.write_char(name[1] as char)?;
+            self.f.write_char(':')?;
         }
         write!(self.f, "[{} * {}]",
             regspec_label(&reg),
@@ -496,7 +510,10 @@ impl <T: fmt::Write, Y: YaxColors> crate::long_mode::OperandVisitor for Colorizi
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
         self.f.write_str(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
-            write!(self.f, "{}:", prefix)?;
+            let name = prefix.name();
+            self.f.write_char(name[0] as char)?;
+            self.f.write_char(name[1] as char)?;
+            self.f.write_char(':')?;
         }
         write!(self.f, "[{} * {} ",
             regspec_label(&reg),
@@ -509,7 +526,10 @@ impl <T: fmt::Write, Y: YaxColors> crate::long_mode::OperandVisitor for Colorizi
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
         self.f.write_str(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
-            write!(self.f, "{}:", prefix)?;
+            let name = prefix.name();
+            self.f.write_char(name[0] as char)?;
+            self.f.write_char(name[1] as char)?;
+            self.f.write_char(':')?;
         }
         write!(self.f, "[{} + {} * {}]",
             regspec_label(&base),
@@ -521,7 +541,10 @@ impl <T: fmt::Write, Y: YaxColors> crate::long_mode::OperandVisitor for Colorizi
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
         self.f.write_str(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
-            write!(self.f, "{}:", prefix)?;
+            let name = prefix.name();
+            self.f.write_char(name[0] as char)?;
+            self.f.write_char(name[1] as char)?;
+            self.f.write_char(':')?;
         }
         write!(self.f, "[{} + {} * {} ",
             regspec_label(&base),
