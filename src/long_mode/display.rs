@@ -3595,6 +3595,20 @@ impl <'instr, T: fmt::Write, Y: YaxColors> Colorize<T, Y> for InstructionDisplay
 /// No per-operand context when contextualizing an instruction!
 struct NoContext;
 
+// TODO: find a better place to put this....
+fn c_to_hex(c: u8) -> u8 {
+    /*
+    static CHARSET: &'static [u8; 16] = b"0123456789abcdef";
+    CHARSET[c as usize]
+    */
+    // the conditional branch below is faster than a lookup, yes
+    if c < 10 {
+        b'0' + c
+    } else {
+        b'a' + c - 10
+    }
+}
+
 impl Instruction {
     pub fn write_to<T: fmt::Write>(&self, out: &mut T) -> fmt::Result {
         self.display_with(DisplayStyle::Intel).contextualize(&NoColors, 0, Some(&NoContext), out)
@@ -3615,9 +3629,9 @@ fn contextualize_intel<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors:
     if instr.prefixes.rep_any() {
         if instr.opcode.can_rep() {
             if instr.prefixes.rep() {
-                write!(out, "rep ")?;
+                out.write_str("rep ")?;
             } else if instr.prefixes.repnz() {
-                write!(out, "repnz ")?;
+                out.write_str("repnz ")?;
             }
         }
     }
@@ -3635,41 +3649,12 @@ fn contextualize_intel<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors:
     if instr.operand_count > 0 {
         out.write_str(" ")?;
 
-        const RELATIVE_BRANCHES: [Opcode; 21] = [
-            Opcode::JMP, Opcode::JRCXZ,
-            Opcode::LOOP, Opcode::LOOPZ, Opcode::LOOPNZ,
-            Opcode::JO, Opcode::JNO,
-            Opcode::JB, Opcode::JNB,
-            Opcode::JZ, Opcode::JNZ,
-            Opcode::JNA, Opcode::JA,
-            Opcode::JS, Opcode::JNS,
-            Opcode::JP, Opcode::JNP,
-            Opcode::JL, Opcode::JGE,
-            Opcode::JLE, Opcode::JG,
-        ];
-
-        if instr.operands[0] == OperandSpec::ImmI8 || instr.operands[0] == OperandSpec::ImmI32 {
-            if RELATIVE_BRANCHES.contains(&instr.opcode) {
-                let x = Operand::from_spec(instr, instr.operands[0]);
-
-                return match x {
-                    Operand::ImmediateI8(rel) => {
-                        if rel >= 0 {
-                            write!(out, "$+{}", colors.number(signed_i32_hex(rel as i32)))
-                        } else {
-                            write!(out, "${}", colors.number(signed_i32_hex(rel as i32)))
-                        }
-                    }
-                    Operand::ImmediateI32(rel) => {
-                        if rel >= 0 {
-                            write!(out, "$+{}", colors.number(signed_i32_hex(rel)))
-                        } else {
-                            write!(out, "${}", colors.number(signed_i32_hex(rel)))
-                        }
-                    }
-                    _ => { unreachable!() }
-                };
-            }
+        if instr.visit_operand(0, &mut RelativeBranchPrinter {
+            inst: instr,
+            colors,
+            out,
+        })? {
+            return Ok(());
         }
 
         let mut displayer = ColorizingOperandVisitor {
@@ -4167,3 +4152,194 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::St
         Ok(())
     }
 }
+
+static RELATIVE_BRANCHES: [Opcode; 21] = [
+    Opcode::JMP, Opcode::JRCXZ,
+    Opcode::LOOP, Opcode::LOOPZ, Opcode::LOOPNZ,
+    Opcode::JO, Opcode::JNO,
+    Opcode::JB, Opcode::JNB,
+    Opcode::JZ, Opcode::JNZ,
+    Opcode::JNA, Opcode::JA,
+    Opcode::JS, Opcode::JNS,
+    Opcode::JP, Opcode::JNP,
+    Opcode::JL, Opcode::JGE,
+    Opcode::JLE, Opcode::JG,
+];
+
+struct RelativeBranchPrinter<'a, Y: YaxColors, F: fmt::Write> {
+    inst: &'a Instruction,
+    colors: &'a Y,
+    out: &'a mut F,
+}
+
+impl<'a, Y: YaxColors, F: fmt::Write> crate::long_mode::OperandVisitor for RelativeBranchPrinter<'a, Y, F> {
+    // return true if we printed a relative branch offset, false otherwise
+    type Ok = bool;
+    // but errors are errors
+    type Error = fmt::Error;
+
+    fn visit_reg(&mut self, _reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_deref(&mut self, _reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_disp(&mut self, _reg: RegSpec, _disp: i32) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    #[cfg_attr(feature="profiling", inline(never))]
+    fn visit_i8(&mut self, rel: i8) -> Result<Self::Ok, Self::Error> {
+        if RELATIVE_BRANCHES.contains(&self.inst.opcode) {
+            self.out.write_char('$')?;
+            // danger_anguished_string_write(self.out, "$");
+            let mut v = rel as u8;
+            if rel < 0 {
+                self.out.write_char('-')?;
+                //danger_anguished_string_write(&mut self.out, "-");
+                v = -rel as u8;
+            } else {
+                self.out.write_char('+')?;
+                // danger_anguished_string_write(&mut self.out, "+");
+            }
+            self.out.write_str("0x")?;
+            // danger_anguished_string_write(self.out, "0x");
+            let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 2];
+            let mut curr = buf.len();
+            loop {
+                let digit = v % 16;
+                let c = c_to_hex(digit as u8);
+                curr -= 1;
+                buf[curr].write(c);
+                v = v / 16;
+                if v == 0 {
+                    break;
+                }
+            }
+            let buf = &buf[curr..];
+            let s = unsafe {
+                core::mem::transmute::<&[core::mem::MaybeUninit<u8>], &str>(buf)
+            };
+
+            self.out.write_str(s)?;
+//            anguished_string_write(&mut self.out, s);
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+    #[cfg_attr(feature="profiling", inline(never))]
+    fn visit_i32(&mut self, rel: i32) -> Result<Self::Ok, Self::Error> {
+        if RELATIVE_BRANCHES.contains(&self.inst.opcode) || self.inst.opcode == Opcode::XBEGIN {
+            self.out.write_char('$')?;
+            // danger_anguished_string_write(self.out, "$");
+            let mut v = rel as u32;
+            if rel < 0 {
+                self.out.write_char('-')?;
+                // danger_anguished_string_write(&mut self.out, "-");
+                v = -rel as u32;
+            } else {
+                self.out.write_char('+')?;
+                // danger_anguished_string_write(&mut self.out, "+");
+            }
+            self.out.write_str("0x")?;
+            // danger_anguished_string_write(self.out, "0x");
+            let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 8];
+            let mut curr = buf.len();
+            loop {
+                let digit = v % 16;
+                let c = c_to_hex(digit as u8);
+                curr -= 1;
+                buf[curr].write(c);
+                v = v / 16;
+                if v == 0 {
+                    break;
+                }
+            }
+            let buf = &buf[curr..];
+            let s = unsafe {
+                core::mem::transmute::<&[core::mem::MaybeUninit<u8>], &str>(buf)
+            };
+
+//                        danger_anguished_string_write(&mut self.out, s);
+
+            // danger_anguished_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, s.as_bytes());
+            self.out.write_str(s)?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+    fn visit_u8(&mut self, _imm: u8) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_i16(&mut self, _imm: i16) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_u16(&mut self, _imm: u16) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_u32(&mut self, _imm: u32) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_i64(&mut self, _imm: i64) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_u64(&mut self, _imm: u64) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_abs_u32(&mut self, _imm: u32) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_abs_u64(&mut self, _imm: u64) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_reg_scale(&mut self, _reg: RegSpec, _scale: u8) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_index_base_scale(&mut self, _base: RegSpec, _index: RegSpec, _scale: u8) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_reg_scale_disp(&mut self, _reg: RegSpec, _scale: u8, _disp: i32) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_index_base_scale_disp(&mut self, _base: RegSpec, _index: RegSpec, _scale: u8, _disp: i32) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_other(&mut self) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_reg_mask_merge(&mut self, _spec: RegSpec, _mask: RegSpec, _merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_reg_mask_merge_sae(&mut self, _spec: RegSpec, _mask: RegSpec, _merge_mode: MergeMode, _sae_mode: crate::long_mode::SaeMode) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_reg_mask_merge_sae_noround(&mut self, _spec: RegSpec, _mask: RegSpec, _merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_reg_disp_masked(&mut self, _spec: RegSpec, _disp: i32, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_reg_deref_masked(&mut self, _spec: RegSpec, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_reg_scale_masked(&mut self, _spec: RegSpec, _scale: u8, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_reg_scale_disp_masked(&mut self, _spec: RegSpec, _scale: u8, _disp: i32, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_index_base_masked(&mut self, _base: RegSpec, _index: RegSpec, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_index_base_disp_masked(&mut self, _base: RegSpec, _index: RegSpec, _disp: i32, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_index_base_scale_masked(&mut self, _base: RegSpec, _index: RegSpec, _scale: u8, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+    fn visit_index_base_scale_disp_masked(&mut self, _base: RegSpec, _index: RegSpec, _scale: u8, _disp: i32, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        Ok(false)
+    }
+}
+
