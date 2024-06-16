@@ -89,6 +89,19 @@ impl fmt::Display for PrefixRex {
     }
 }
 
+impl Segment {
+    fn name(&self) -> &'static [u8; 2] {
+        match self {
+            Segment::CS => b"cs",
+            Segment::DS => b"ds",
+            Segment::ES => b"es",
+            Segment::FS => b"fs",
+            Segment::GS => b"gs",
+            Segment::SS => b"ss",
+        }
+    }
+}
+
 impl fmt::Display for Segment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -3595,6 +3608,54 @@ impl <'instr, T: fmt::Write, Y: YaxColors> Colorize<T, Y> for InstructionDisplay
 /// No per-operand context when contextualizing an instruction!
 struct NoContext;
 
+extern crate alloc;
+
+trait Writable<T> {
+    unsafe fn as_mut_vec(&mut self) -> &mut alloc::vec::Vec<u8>;
+    fn into_inner(self) -> T;
+}
+
+impl Writable<alloc::string::String> for alloc::string::String {
+    unsafe fn as_mut_vec(&mut self) -> &mut alloc::vec::Vec<u8> {
+        self.as_mut_vec()
+    }
+    fn into_inner(self) -> alloc::string::String {
+        self
+    }
+}
+
+struct BigEnoughString {
+    content: alloc::string::String,
+}
+
+impl Writable<alloc::string::String> for BigEnoughString {
+    unsafe fn as_mut_vec(&mut self) -> &mut alloc::vec::Vec<u8> {
+        self.content.as_mut_vec()
+    }
+    fn into_inner(self) -> alloc::string::String {
+        self.content
+    }
+}
+
+impl BigEnoughString {
+    pub fn from_string(mut s: alloc::string::String) -> Self {
+        s.reserve(256);
+        // safety: the string is large enough
+        unsafe { Self::from_string_unchecked(s) }
+    }
+
+    pub fn new() -> Self {
+        Self::from_string(alloc::string::String::new())
+    }
+
+    /// safety: CALLER MUST ENSURE S IS LARGE ENOUGH TO HOLD ANY DISASSEMBLED x86 INSTRUCTION
+    unsafe fn from_string_unchecked(s: alloc::string::String) -> Self {
+        Self {
+            content: s
+        }
+    }
+}
+
 // TODO: find a better place to put this....
 fn c_to_hex(c: u8) -> u8 {
     /*
@@ -3610,6 +3671,1268 @@ fn c_to_hex(c: u8) -> u8 {
 }
 
 impl Instruction {
+//    pub fn write_2<T, U: Writable<T>>(&self, out: &mut alloc::string::String) -> fmt::Result {
+    #[cfg_attr(feature="profiling", inline(never))]
+    pub fn write_2(&self, out: &mut alloc::string::String) -> fmt::Result {
+        use core::fmt::Write;
+
+        unsafe { out.as_mut_vec().reserve(64) };
+
+        fn anguished_string_write(out: &mut alloc::string::String, label: &str) {
+            let new_bytes = label.as_bytes();
+            let buf = unsafe { out.as_mut_vec() };
+            anguished_bstring_write(buf, new_bytes);
+        }
+        fn anguished_bstring_write(buf: &mut alloc::vec::Vec<u8>, new_bytes: &[u8]) {
+            if new_bytes.len() >= 32 {
+                unsafe { core::hint::unreachable_unchecked() }
+            }
+            buf.reserve(new_bytes.len());
+            for i in 0..new_bytes.len() {
+                unsafe {
+                    buf.as_mut_ptr().offset(buf.len() as isize).offset(i as isize).write_volatile(new_bytes[i]);
+                }
+            }
+            unsafe {
+                buf.set_len(buf.len() + new_bytes.len());
+            }
+        }
+
+        fn danger_anguished_string_write(out: &mut alloc::string::String, label: &str) {
+            let new_bytes = label.as_bytes();
+            let buf = unsafe { out.as_mut_vec() };
+            danger_anguished_bstring_write(buf, new_bytes);
+        }
+        fn danger_anguished_bstring_write(buf: &mut alloc::vec::Vec<u8>, new_bytes: &[u8]) {
+            if new_bytes.len() >= 16 {
+                unsafe { core::hint::unreachable_unchecked() }
+            }
+
+            unsafe {
+            let dest = buf.as_mut_ptr().offset(buf.len() as isize);
+            let src = new_bytes.as_ptr();
+
+            let mut rem = new_bytes.len() as isize;
+            unsafe {
+                buf.set_len(buf.len() + new_bytes.len());
+            }
+            /*
+            while rem % 4 > 0 {
+                dest.offset(rem - 1).write_unaligned(src.offset(rem - 1).read_unaligned());
+                rem -= 1;
+            }
+
+            while rem > 0 {
+                (dest.offset(rem - 4) as *mut u32).write_unaligned(unsafe {
+                    *core::mem::transmute::<&u8, &u32>(&new_bytes[rem as usize - 4])
+                });
+                rem -= 4;
+            }
+            */
+            /*
+            unsafe {
+                core::arch::asm!(
+                    "7:",
+                    "cmp {rem}, 4",
+                    "jb 8f",
+                    "sub {rem}, 4",
+                    "mov {buf:e}, dword ptr [{src} + {rem}]",
+                    "mov dword ptr [{dest} + {rem}], {buf:e}",
+                    "jmp 7b",
+                    "8:",
+                    "test {rem}, {rem}",
+                    "jz 10f",
+                    "sub {rem}, 1",
+                    "mov {buf:l}, byte ptr [{src} + {rem}]",
+                    "mov byte ptr [{dest} + {rem}], {buf:l}",
+                    "jnz 8b",
+                    "10:",
+                    src = in(reg) src,
+                    dest = in(reg) dest,
+                    rem = in(reg) rem,
+//                    tmp = out(reg) _,
+                    buf = out(reg) _,
+                    options(nostack),
+                );
+            }
+            */
+            /*
+            unsafe {
+                core::arch::asm!(
+                    "mov {tmp}, {rem}",
+                    "and {tmp}, 3",
+                    "je 3f",
+                    "sub {rem}, {tmp}",
+                    "2:",
+                    "mov {buf:l}, byte ptr [{src}]",
+                    "mov byte ptr [{dest}], {buf:l}",
+                    "add {src}, 1",
+                    "add {dest}, 1",
+                    "sub {tmp}, 1",
+                    "jnz 2b",
+                    "3:",
+                    "test {rem}, {rem}",
+                    "jz 5f",
+                    "4:",
+                    "sub {rem}, 4",
+                    "mov {buf:e}, dword ptr [{src} + {rem}]",
+                    "mov dword ptr [{dest} + {rem}], {buf:e}",
+                    "jnz 4b",
+                    "5:",
+                    src = in(reg) src,
+                    dest = in(reg) dest,
+                    rem = in(reg) rem,
+                    tmp = out(reg) _,
+                    buf = out(reg) _,
+                );
+            }
+            */
+            /*
+            */
+            dest.offset(0 as isize).write(new_bytes[0]);
+            for i in 1..new_bytes.len() {
+                unsafe {
+                    dest.offset(i as isize).write(new_bytes[i]);
+                }
+            }
+            // }
+            }
+        }
+
+        fn danger_anguished_variable_length_string_write(out: &mut alloc::string::String, label: &str) {
+            let new_bytes = label.as_bytes();
+            let buf = unsafe { out.as_mut_vec() };
+            danger_anguished_variable_length_bstring_write(buf, new_bytes);
+        }
+        #[cfg_attr(feature="profiling", inline(never))]
+        fn danger_anguished_variable_length_bstring_write(buf: &mut alloc::vec::Vec<u8>, new_bytes: &[u8]) {
+            if new_bytes.len() >= 16 {
+                unsafe { core::hint::unreachable_unchecked() }
+            }
+            if new_bytes.len() == 0 {
+                unsafe { core::hint::unreachable_unchecked() }
+            }
+
+            unsafe {
+            let dest = buf.as_mut_ptr().offset(buf.len() as isize);
+            let src = new_bytes.as_ptr();
+
+            let mut rem = new_bytes.len() as isize;
+            unsafe {
+                buf.set_len(buf.len() + new_bytes.len());
+            }
+            /*
+            while rem % 4 > 0 {
+                dest.offset(rem - 1).write_unaligned(src.offset(rem - 1).read_unaligned());
+                rem -= 1;
+            }
+
+            while rem > 0 {
+                (dest.offset(rem - 4) as *mut u32).write_unaligned(unsafe {
+                    *core::mem::transmute::<&u8, &u32>(&new_bytes[rem as usize - 4])
+                });
+                rem -= 4;
+            }
+            */
+            unsafe {
+                /*
+                if rem >= 8 {
+                    rem -= 8;
+                    (dest.offset(rem) as *mut u64).write_unaligned((src.offset(rem) as *const u64).read_unaligned())
+                }
+                if rem >= 4 {
+                    rem -= 4;
+                    (dest.offset(rem) as *mut u32).write_unaligned((src.offset(rem) as *const u32).read_unaligned());
+                    if rem == 0 {
+                        return;
+                    }
+                }
+                if rem >= 2 {
+                    rem -= 2;
+                    (dest.offset(rem) as *mut u16).write_unaligned((src.offset(rem) as *const u16).read_unaligned());
+                    if rem == 0 {
+                        return;
+                    }
+                }
+                if rem >= 1 {
+                    rem -= 1;
+                    (dest.offset(rem) as *mut u8).write_unaligned((src.offset(rem) as *const u8).read_unaligned())
+                }
+                */
+                core::arch::asm!(
+                    "7:",
+                    "cmp {rem:e}, 8",
+                    "jb 8f",
+                    "mov {buf:r}, qword ptr [{src} + {rem} - 8]",
+                    "mov qword ptr [{dest} + {rem} - 8], {buf:r}",
+                    "sub {rem:e}, 8",
+                    "jz 11f",
+                    "8:",
+                    "cmp {rem:e}, 4",
+                    "jb 9f",
+                    "mov {buf:e}, dword ptr [{src} + {rem} - 4]",
+                    "mov dword ptr [{dest} + {rem} - 4], {buf:e}",
+                    "sub {rem:e}, 4",
+                    "jz 11f",
+                    "9:",
+                    "cmp {rem:e}, 2",
+                    "jb 10f",
+                    "mov {buf:x}, word ptr [{src} + {rem} - 2]",
+                    "mov word ptr [{dest} + {rem} - 2], {buf:x}",
+                    "sub {rem:e}, 2",
+                    "jz 11f",
+                    "10:",
+                    "cmp {rem:e}, 1",
+                    "jb 11f",
+                    "mov {buf:l}, byte ptr [{src} + {rem} - 1]",
+                    "mov byte ptr [{dest} + {rem} - 1], {buf:l}",
+                    "11:",
+                    src = in(reg) src,
+                    dest = in(reg) dest,
+                    rem = inout(reg) rem => _,
+//                    tmp = out(reg) _,
+                    buf = out(reg) _,
+                    options(nostack),
+                );
+            }
+            /*
+            unsafe {
+                core::arch::asm!(
+                    "7:",
+                    "cmp {rem:e}, 4",
+                    "jb 8f",
+                    "sub {rem:e}, 4",
+                    "mov {buf:e}, dword ptr [{src} + {rem}]",
+                    "mov dword ptr [{dest} + {rem}], {buf:e}",
+                    "jmp 7b",
+                    "8:",
+                    "test {rem:e}, {rem:e}",
+                    "jz 10f",
+                    "sub {rem:e}, 1",
+                    "mov {buf:l}, byte ptr [{src} + {rem}]",
+                    "mov byte ptr [{dest} + {rem}], {buf:l}",
+                    "jnz 8b",
+                    "10:",
+                    src = in(reg) src,
+                    dest = in(reg) dest,
+                    rem = in(reg) rem,
+//                    tmp = out(reg) _,
+                    buf = out(reg) _,
+                    options(nostack),
+                );
+            }
+            */
+            /*
+            unsafe {
+                core::arch::asm!(
+                    "mov {tmp}, {rem}",
+                    "and {tmp}, 3",
+                    "je 3f",
+                    "sub {rem}, {tmp}",
+                    "2:",
+                    "mov {buf:l}, byte ptr [{src}]",
+                    "mov byte ptr [{dest}], {buf:l}",
+                    "add {src}, 1",
+                    "add {dest}, 1",
+                    "sub {tmp}, 1",
+                    "jnz 2b",
+                    "3:",
+                    "test {rem}, {rem}",
+                    "jz 5f",
+                    "4:",
+                    "sub {rem}, 4",
+                    "mov {buf:e}, dword ptr [{src} + {rem}]",
+                    "mov dword ptr [{dest} + {rem}], {buf:e}",
+                    "jnz 4b",
+                    "5:",
+                    src = in(reg) src,
+                    dest = in(reg) dest,
+                    rem = in(reg) rem,
+                    tmp = out(reg) _,
+                    buf = out(reg) _,
+                );
+            }
+            */
+            /*
+            for i in 0..new_bytes.len() {
+                unsafe {
+                    buf.as_mut_ptr().offset(buf.len() as isize).offset(i as isize).write_volatile(new_bytes[i]);
+                }
+            }
+            */
+            }
+        }
+        fn danger_anguished_smaller_variable_length_bstring_write(buf: &mut alloc::vec::Vec<u8>, new_bytes: &[u8]) {
+            if new_bytes.len() >= 8 {
+                unsafe { core::hint::unreachable_unchecked() }
+            }
+            if new_bytes.len() == 0 {
+                unsafe { core::hint::unreachable_unchecked() }
+            }
+
+            unsafe {
+            let dest = buf.as_mut_ptr().offset(buf.len() as isize);
+            let src = new_bytes.as_ptr();
+
+            let mut rem = new_bytes.len() as isize;
+            unsafe {
+                buf.set_len(buf.len() + new_bytes.len());
+            }
+            /*
+            while rem % 4 > 0 {
+                dest.offset(rem - 1).write_unaligned(src.offset(rem - 1).read_unaligned());
+                rem -= 1;
+            }
+
+            while rem > 0 {
+                (dest.offset(rem - 4) as *mut u32).write_unaligned(unsafe {
+                    *core::mem::transmute::<&u8, &u32>(&new_bytes[rem as usize - 4])
+                });
+                rem -= 4;
+            }
+            */
+            unsafe {
+                /*
+                if rem >= 4 {
+                    rem -= 4;
+                    (dest.offset(rem as isize) as *mut u32).write_unaligned((src.offset(rem as isize) as *const u32).read_unaligned());
+                    if rem == 0 {
+                        return;
+                    }
+                }
+                if rem >= 2 {
+                    rem -= 2;
+                    (dest.offset(rem as isize) as *mut u16).write_unaligned((src.offset(rem as isize) as *const u16).read_unaligned());
+                    if rem == 0 {
+                        return;
+                    }
+                }
+                if rem >= 1 {
+                    rem -= 1;
+                    (dest.offset(rem as isize) as *mut u8).write_unaligned((src.offset(rem as isize) as *const u8).read_unaligned())
+                }
+                */
+                core::arch::asm!(
+                    "8:",
+                    "cmp {rem:e}, 4",
+                    "jb 9f",
+                    "mov {buf:e}, dword ptr [{src} + {rem} - 4]",
+                    "mov dword ptr [{dest} + {rem} - 4], {buf:e}",
+                    "sub {rem:e}, 4",
+                    "jz 11f",
+                    "9:",
+                    "cmp {rem:e}, 2",
+                    "jb 10f",
+                    "mov {buf:x}, word ptr [{src} + {rem} - 2]",
+                    "mov word ptr [{dest} + {rem} - 2], {buf:x}",
+                    "sub {rem:e}, 2",
+                    "jz 11f",
+                    "10:",
+                    "cmp {rem:e}, 1",
+                    "jb 11f",
+                    "mov {buf:l}, byte ptr [{src} + {rem} - 1]",
+                    "mov byte ptr [{dest} + {rem} - 1], {buf:l}",
+                    "11:",
+                    src = in(reg) src,
+                    dest = in(reg) dest,
+                    rem = inout(reg) rem => _,
+//                    tmp = out(reg) _,
+                    buf = out(reg) _,
+                    options(nostack),
+                );
+            }
+            /*
+            unsafe {
+                core::arch::asm!(
+                    "7:",
+                    "cmp {rem:e}, 4",
+                    "jb 8f",
+                    "sub {rem:e}, 4",
+                    "mov {buf:e}, dword ptr [{src} + {rem}]",
+                    "mov dword ptr [{dest} + {rem}], {buf:e}",
+                    "jmp 7b",
+                    "8:",
+                    "test {rem:e}, {rem:e}",
+                    "jz 10f",
+                    "sub {rem:e}, 1",
+                    "mov {buf:l}, byte ptr [{src} + {rem}]",
+                    "mov byte ptr [{dest} + {rem}], {buf:l}",
+                    "jnz 8b",
+                    "10:",
+                    src = in(reg) src,
+                    dest = in(reg) dest,
+                    rem = in(reg) rem,
+//                    tmp = out(reg) _,
+                    buf = out(reg) _,
+                    options(nostack),
+                );
+            }
+            */
+            /*
+            unsafe {
+                core::arch::asm!(
+                    "mov {tmp}, {rem}",
+                    "and {tmp}, 3",
+                    "je 3f",
+                    "sub {rem}, {tmp}",
+                    "2:",
+                    "mov {buf:l}, byte ptr [{src}]",
+                    "mov byte ptr [{dest}], {buf:l}",
+                    "add {src}, 1",
+                    "add {dest}, 1",
+                    "sub {tmp}, 1",
+                    "jnz 2b",
+                    "3:",
+                    "test {rem}, {rem}",
+                    "jz 5f",
+                    "4:",
+                    "sub {rem}, 4",
+                    "mov {buf:e}, dword ptr [{src} + {rem}]",
+                    "mov dword ptr [{dest} + {rem}], {buf:e}",
+                    "jnz 4b",
+                    "5:",
+                    src = in(reg) src,
+                    dest = in(reg) dest,
+                    rem = in(reg) rem,
+                    tmp = out(reg) _,
+                    buf = out(reg) _,
+                );
+            }
+            */
+            /*
+            for i in 0..new_bytes.len() {
+                unsafe {
+                    buf.as_mut_ptr().offset(buf.len() as isize).offset(i as isize).write_volatile(new_bytes[i]);
+                }
+            }
+            */
+            }
+        }
+
+        let address: u64 = 0;
+        let context = Some(&NoContext);
+        let colors = &NoColors;
+        if self.prefixes.rep_any() {
+            if self.xacquire() {
+                danger_anguished_string_write(out, "xacquire ");
+            }
+            if self.xrelease() {
+                danger_anguished_string_write(out, "xrelease ");
+            }
+
+            if self.opcode.can_rep() {
+                if self.prefixes.rep() {
+                    danger_anguished_string_write(out, "rep ");
+                } else if self.prefixes.repnz() {
+                    danger_anguished_string_write(out, "repnz ");
+                }
+            }
+        }
+
+        if self.prefixes.lock() {
+            danger_anguished_string_write(out, "lock ");
+        }
+
+        use core::mem::MaybeUninit;
+
+        danger_anguished_variable_length_string_write(out, self.opcode.name());
+
+        if self.operand_count > 0 {
+            danger_anguished_string_write(out, " ");
+
+//            let x = Operand::from_spec(self, self.operands[0]);
+
+            struct RelativeBranchPrinter<'a, Y: YaxColors> {
+                inst: &'a Instruction,
+                colors: &'a Y,
+                out: &'a mut alloc::string::String,
+            }
+
+            impl<'a, Y: YaxColors> crate::long_mode::OperandVisitor for RelativeBranchPrinter<'a, Y> {
+                // return true if we printed a relative branch offset, false otherwise
+                type Ok = bool;
+                // but errors are errors
+                type Error = fmt::Error;
+
+                fn visit_reg(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_deref(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_disp(&mut self, reg: RegSpec, disp: i32) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                #[cfg_attr(feature="profiling", inline(never))]
+                fn visit_i8(&mut self, rel: i8) -> Result<Self::Ok, Self::Error> {
+                    if RELATIVE_BRANCHES.contains(&self.inst.opcode) {
+                        danger_anguished_string_write(self.out, "$");
+                        let mut v = rel as u8;
+                        if rel < 0 {
+                            danger_anguished_string_write(&mut self.out, "-");
+                            v = -rel as u8;
+                        } else {
+                            danger_anguished_string_write(&mut self.out, "+");
+                        }
+                        danger_anguished_string_write(self.out, "0x");
+                        let mut buf = [MaybeUninit::<u8>::uninit(); 2];
+                        let mut curr = buf.len();
+                        loop {
+                            let digit = v % 16;
+                            let c = c_to_hex(digit as u8);
+                            curr -= 1;
+                            buf[curr].write(c);
+                            v = v / 16;
+                            if v == 0 {
+                                break;
+                            }
+                        }
+                        let buf = &buf[curr..];
+                        let s = unsafe {
+                            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+                        };
+
+                        anguished_string_write(&mut self.out, s);
+                        Ok(true)
+                    } else {
+                        Ok(false)
+                    }
+                }
+                #[cfg_attr(feature="profiling", inline(never))]
+                fn visit_i32(&mut self, rel: i32) -> Result<Self::Ok, Self::Error> {
+                    if RELATIVE_BRANCHES.contains(&self.inst.opcode) || self.inst.opcode == Opcode::XBEGIN {
+                        danger_anguished_string_write(self.out, "$");
+                        let mut v = rel as u32;
+                        if rel < 0 {
+                            danger_anguished_string_write(&mut self.out, "-");
+                            v = -rel as u32;
+                        } else {
+                            danger_anguished_string_write(&mut self.out, "+");
+                        }
+                        danger_anguished_string_write(self.out, "0x");
+                        let mut buf = [MaybeUninit::<u8>::uninit(); 8];
+                        let mut curr = buf.len();
+                        loop {
+                            let digit = v % 16;
+                            let c = c_to_hex(digit as u8);
+                            curr -= 1;
+                            buf[curr].write(c);
+                            v = v / 16;
+                            if v == 0 {
+                                break;
+                            }
+                        }
+                        let buf = &buf[curr..];
+                        let s = unsafe {
+                            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+                        };
+
+//                        danger_anguished_string_write(&mut self.out, s);
+
+                        danger_anguished_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, s.as_bytes());
+                        Ok(true)
+                    } else {
+                        Ok(false)
+                    }
+                }
+                fn visit_u8(&mut self, imm: u8) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_i16(&mut self, imm: i16) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_u16(&mut self, imm: u16) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_i64(&mut self, imm: i64) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_u64(&mut self, imm: u64) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_abs_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_abs_u64(&mut self, imm: u64) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_reg_scale(&mut self, reg: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_index_base_scale(&mut self, base: RegSpec, index: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_reg_scale_disp(&mut self, reg: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_index_base_scale_disp(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_other(&mut self) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_reg_mask_merge(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_reg_mask_merge_sae(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode, sae_mode: crate::long_mode::SaeMode) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_reg_mask_merge_sae_noround(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_reg_disp_masked(&mut self, spec: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_reg_deref_masked(&mut self, spec: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_reg_scale_masked(&mut self, spec: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_reg_scale_disp_masked(&mut self, spec: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_index_base_masked(&mut self, base: RegSpec, index: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_index_base_disp_masked(&mut self, base: RegSpec, index: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_index_base_scale_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+                fn visit_index_base_scale_disp_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                    Ok(false)
+                }
+            }
+
+            if self.visit_operand(0, &mut RelativeBranchPrinter {
+                inst: &self,
+                colors,
+                out,
+            })? {
+                return Ok(());
+            }
+
+            fn display_op<Y: YaxColors>(inst: &Instruction, op_nr: u8, colors: &Y, out: &mut alloc::string::String) -> fmt::Result {
+                struct OperandPrinter<'a, Y: YaxColors> {
+                    out: &'a mut alloc::string::String,
+                    op_nr: u8,
+                    colors: &'a Y,
+                    inst: &'a Instruction,
+                }
+
+                impl<'a, Y: YaxColors> crate::long_mode::OperandVisitor for OperandPrinter<'a, Y> {
+                    type Ok = ();
+                    type Error = fmt::Error;
+
+                #[cfg_attr(feature="profiling", inline(never))]
+                    fn visit_reg(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                        let label = regspec_label(&reg);
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, label.as_bytes());
+//                        danger_anguished_variable_length_string_write(self.out, label);
+                        Ok(())
+                    }
+                #[cfg_attr(feature="profiling", inline(never))]
+                    fn visit_deref(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, mem_size_label(self.inst.mem_size).as_bytes());
+//                        self.out.write_str(" ")?;
+
+                        if self.op_nr >= 4 {
+                            unsafe { core::hint::unreachable_unchecked(); }
+                        }
+                        if let Some(prefix) = self.inst.segment_override_for_op(self.op_nr) {
+                            danger_anguished_string_write(self.out, " ");
+                            danger_anguished_bstring_write(unsafe{self.out.as_mut_vec()}, prefix.name());
+//                            self.out.write_str(":")?;
+                            danger_anguished_string_write(self.out, ":[");
+                        } else {
+//                        self.out.write_str("[")?;
+                            danger_anguished_string_write(self.out, " [");
+                        }
+                        let label = regspec_label(&reg);
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, label.as_bytes());
+//                        self.out.write_str("]")
+                        danger_anguished_string_write(self.out, "]");
+                        Ok(())
+                    }
+                #[cfg_attr(feature="profiling", inline(never))]
+                    fn visit_disp(&mut self, reg: RegSpec, disp: i32) -> Result<Self::Ok, Self::Error> {
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, mem_size_label(self.inst.mem_size).as_bytes());
+
+                        if self.op_nr >= 4 {
+                            unsafe { core::hint::unreachable_unchecked(); }
+                        }
+                        if let Some(prefix) = self.inst.segment_override_for_op(self.op_nr) {
+                            danger_anguished_string_write(self.out, " ");
+                            danger_anguished_bstring_write(unsafe{self.out.as_mut_vec()}, prefix.name());
+                            danger_anguished_string_write(self.out, ":[");
+                        } else {
+                            danger_anguished_string_write(self.out, " [");
+                        }
+                        let label = regspec_label(&reg);
+                        if label.len() < 2 {
+                            unsafe { core::hint::unreachable_unchecked(); }
+                        }
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, label.as_bytes());
+                        // write!(self.out, "{}", self.colors.number(signed_i32_hex(disp)))?;
+                        let mut v = disp as u32;
+                        if disp < 0 {
+                            danger_anguished_string_write(self.out, " - 0x");
+                            v = -disp as u32;
+                        } else {
+                            danger_anguished_string_write(self.out, " + 0x");
+                        }
+                        if v == 0 {
+                            danger_anguished_string_write(self.out, "0");
+                        } else {
+                            let lzcnt = v.leading_zeros();
+                            let mut digits = 8 - (lzcnt/8);
+                            while digits > 0 {
+                                let digit = (v >> (digits * 8)) & 0xf;
+                                let c = c_to_hex(digit as u8);
+                                danger_anguished_bstring_write(unsafe {self.out.as_mut_vec()}, &[c]);
+                                digits -= 1;
+                            }
+                        }
+                        /*
+                        let mut buf = [MaybeUninit::<u8>::uninit(); 8];
+                        let mut curr = buf.len();
+                        loop {
+                            let digit = v % 16;
+                            static CHARSET: &'static [u8; 16] = b"0123456789abcdef";
+                            let c = CHARSET[digit as usize];
+                            curr -= 1;
+                            buf[curr].write(c);
+                            v = v / 16;
+                            if v == 0 {
+                                break;
+                            }
+                        }
+                        let buf = &buf[curr..];
+                        let s = unsafe {
+                            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+                        };
+                        danger_anguished_string_write(&mut self.out, s);
+                        */
+                        danger_anguished_string_write(&mut self.out, "]");
+                        Ok(())
+                    }
+                #[cfg_attr(feature="profiling", inline(never))]
+                    fn visit_i8(&mut self, imm: i8) -> Result<Self::Ok, Self::Error> {
+                        let mut v = imm as u8;
+                        if imm < 0 {
+                            danger_anguished_string_write(&mut self.out, "-");
+                            v = -imm as u8;
+                        }
+                        danger_anguished_string_write(&mut self.out, "0x");
+                        let mut buf = [MaybeUninit::<u8>::uninit(); 2];
+                        let mut curr = buf.len();
+                        loop {
+                            let digit = v % 16;
+                            let c = c_to_hex(digit as u8);
+                            curr -= 1;
+                            buf[curr].write(c);
+                            v = v / 16;
+                            if v == 0 {
+                                break;
+                            }
+                        }
+                        let buf = &buf[curr..];
+                        let s: &str = unsafe {
+                            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+                        };
+                        danger_anguished_string_write(&mut self.out, s);
+                        Ok(())
+                    }
+                #[cfg_attr(feature="profiling", inline(never))]
+                    fn visit_u8(&mut self, imm: u8) -> Result<Self::Ok, Self::Error> {
+                        let mut v = imm as u8;
+                        danger_anguished_string_write(&mut self.out, "0x");
+                        let mut buf = [MaybeUninit::<u8>::uninit(); 2];
+                        let mut curr = buf.len();
+                        loop {
+                            let digit = v % 16;
+                            let c = c_to_hex(digit as u8);
+                            curr -= 1;
+                            buf[curr].write(c);
+                            v = v / 16;
+                            if v == 0 {
+                                break;
+                            }
+                        }
+                        let buf = &buf[curr..];
+                        let s: &str = unsafe {
+                            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+                        };
+                        danger_anguished_string_write(&mut self.out, s);
+                        Ok(())
+
+                    }
+                #[cfg_attr(feature="profiling", inline(never))]
+                    fn visit_i16(&mut self, imm: i16) -> Result<Self::Ok, Self::Error> {
+                        let mut v = imm as u16;
+                        if imm < 0 {
+                            danger_anguished_string_write(&mut self.out, "-");
+                            v = -imm as u16;
+                        }
+                        danger_anguished_string_write(&mut self.out, "0x");
+                        let mut buf = [MaybeUninit::<u8>::uninit(); 4];
+                        let mut curr = buf.len();
+                        loop {
+                            let digit = v % 16;
+                            let c = c_to_hex(digit as u8);
+                            curr -= 1;
+                            buf[curr].write(c);
+                            v = v / 16;
+                            if v == 0 {
+                                break;
+                            }
+                        }
+                        let buf = &buf[curr..];
+                        let s: &str = unsafe {
+                            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+                        };
+                        anguished_string_write(&mut self.out, s);
+                        Ok(())
+                    }
+                #[cfg_attr(feature="profiling", inline(never))]
+                    fn visit_u16(&mut self, imm: u16) -> Result<Self::Ok, Self::Error> {
+                        let mut v = imm as u32;
+                        danger_anguished_string_write(&mut self.out, "0x");
+                        let mut buf = [MaybeUninit::<u8>::uninit(); 4];
+                        let mut curr = buf.len();
+                        loop {
+                            let digit = v % 16;
+                            let c = c_to_hex(digit as u8);
+                            curr -= 1;
+                            buf[curr].write(c);
+                            v = v / 16;
+                            if v == 0 {
+                                break;
+                            }
+                        }
+                        let buf = &buf[curr..];
+                        let s = unsafe {
+                            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+                        };
+                        anguished_string_write(&mut self.out, s);
+                        Ok(())
+                    }
+                #[cfg_attr(feature="profiling", inline(never))]
+                    fn visit_i32(&mut self, imm: i32) -> Result<Self::Ok, Self::Error> {
+                        let mut v = imm as u32;
+                        if imm < 0 {
+                            danger_anguished_string_write(&mut self.out, "-");
+                            v = -imm as u32;
+                        }
+                        danger_anguished_string_write(&mut self.out, "0x");
+                        let mut buf = [MaybeUninit::<u8>::uninit(); 8];
+                        let mut curr = buf.len();
+                        loop {
+                            let digit = v % 16;
+                            let c = c_to_hex(digit as u8);
+                            curr -= 1;
+                            buf[curr].write(c);
+                            v = v / 16;
+                            if v == 0 {
+                                break;
+                            }
+                        }
+                        let buf = &buf[curr..];
+                        let s = unsafe {
+                            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+                        };
+                        // danger_anguished_string_write(&mut self.out, s);
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, s.as_bytes());
+                        Ok(())
+                    }
+                #[cfg_attr(feature="profiling", inline(never))]
+                    fn visit_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
+                        let mut v = imm as u32;
+                        danger_anguished_string_write(&mut self.out, "0x");
+                        let mut buf = [MaybeUninit::<u8>::uninit(); 8];
+                        let mut curr = buf.len();
+                        loop {
+                            let digit = v % 16;
+                            let c = c_to_hex(digit as u8);
+                            curr -= 1;
+                            buf[curr].write(c);
+                            v = v / 16;
+                            if v == 0 {
+                                break;
+                            }
+                        }
+                        let buf = &buf[curr..];
+                        let s = unsafe {
+                            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+                        };
+                        //danger_anguished_string_write(&mut self.out, s);
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, s.as_bytes());
+                        Ok(())
+                    }
+                #[cfg_attr(feature="profiling", inline(never))]
+                    fn visit_i64(&mut self, imm: i64) -> Result<Self::Ok, Self::Error> {
+                        let mut v = imm as u32;
+                        if imm < 0 {
+                            danger_anguished_string_write(&mut self.out, "-");
+                            v = -imm as u32;
+                        }
+                        danger_anguished_string_write(&mut self.out, "0x");
+                        let mut buf = [MaybeUninit::<u8>::uninit(); 16];
+                        let mut curr = buf.len();
+                        loop {
+                            let digit = v % 16;
+                            let c = c_to_hex(digit as u8);
+                            curr -= 1;
+                            buf[curr].write(c);
+                            v = v / 16;
+                            if v == 0 {
+                                break;
+                            }
+                        }
+                        let buf = &buf[curr..];
+                        let s = unsafe {
+                            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+                        };
+                        danger_anguished_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, s.as_bytes());
+                        Ok(())
+
+
+                    }
+                #[cfg_attr(feature="profiling", inline(never))]
+                    fn visit_u64(&mut self, imm: u64) -> Result<Self::Ok, Self::Error> {
+                        let mut v = imm as u64;
+                        danger_anguished_string_write(&mut self.out, "0x");
+                        let mut buf = [MaybeUninit::<u8>::uninit(); 16];
+                        let mut curr = buf.len();
+                        loop {
+                            let digit = v % 16;
+                            let c = c_to_hex(digit as u8);
+                            curr -= 1;
+                            buf[curr].write(c);
+                            v = v / 16;
+                            if v == 0 {
+                                break;
+                            }
+                        }
+                        let buf = &buf[curr..];
+                        let s = unsafe {
+                            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+                        };
+                        danger_anguished_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, s.as_bytes());
+                        Ok(())
+                    }
+                #[cfg_attr(feature="profiling", inline(never))]
+                    fn visit_abs_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, mem_size_label(self.inst.mem_size).as_bytes());
+                        danger_anguished_string_write(self.out, " [0x");
+                        let mut v = imm as u32;
+                        let mut buf = [MaybeUninit::<u8>::uninit(); 16];
+                        let mut curr = buf.len();
+                        loop {
+                            let digit = v % 16;
+                            let c = c_to_hex(digit as u8);
+                            curr -= 1;
+                            buf[curr].write(c);
+                            v = v / 16;
+                            if v == 0 {
+                                break;
+                            }
+                        }
+                        let buf = &buf[curr..];
+                        let s = unsafe {
+                            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+                        };
+                        // anguished_string_write(&mut self.out, s);
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, s.as_bytes());
+                        danger_anguished_string_write(self.out, "]");
+                        Ok(())
+                    }
+                #[cfg_attr(feature="profiling", inline(never))]
+                    fn visit_abs_u64(&mut self, imm: u64) -> Result<Self::Ok, Self::Error> {
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, mem_size_label(self.inst.mem_size).as_bytes());
+                        danger_anguished_string_write(self.out, " [0x");
+                        let mut v = imm as u64;
+                        let mut buf = [MaybeUninit::<u8>::uninit(); 16];
+                        let mut curr = buf.len();
+                        loop {
+                            let digit = v % 16;
+                            let c = c_to_hex(digit as u8);
+                            curr -= 1;
+                            buf[curr].write(c);
+                            v = v / 16;
+                            if v == 0 {
+                                break;
+                            }
+                        }
+                        let buf = &buf[curr..];
+                        let s = unsafe {
+                            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+                        };
+                        // anguished_string_write(&mut self.out, s);
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, s.as_bytes());
+                        danger_anguished_string_write(self.out, "]");
+                        Ok(())
+                    }
+                #[cfg_attr(feature="profiling", inline(never))]
+                    fn visit_reg_scale(&mut self, reg: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, mem_size_label(self.inst.mem_size).as_bytes());
+                        danger_anguished_string_write(self.out, " ");
+
+                        if self.op_nr >= 4 {
+                            unsafe { core::hint::unreachable_unchecked(); }
+                        }
+                        if let Some(prefix) = self.inst.segment_override_for_op(self.op_nr) {
+                            danger_anguished_bstring_write(unsafe{self.out.as_mut_vec()}, prefix.name());
+                            danger_anguished_string_write(self.out, ":");
+                        }
+                        danger_anguished_string_write(self.out, "[");
+                        let label = regspec_label(&reg);
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, label.as_bytes());
+                        danger_anguished_string_write(self.out, " * ");
+                        danger_anguished_bstring_write(unsafe { self.out.as_mut_vec() }, &[scale + b'0']);
+                        danger_anguished_string_write(self.out, "]");
+                        Ok(())
+                    }
+                #[cfg_attr(feature="profiling", inline(never))]
+                    fn visit_index_base_scale(&mut self, base: RegSpec, index: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, mem_size_label(self.inst.mem_size).as_bytes());
+                        danger_anguished_string_write(self.out, " ");
+
+                        if self.op_nr >= 4 {
+                            unsafe { core::hint::unreachable_unchecked(); }
+                        }
+                        if let Some(prefix) = self.inst.segment_override_for_op(self.op_nr) {
+                            danger_anguished_bstring_write(unsafe{self.out.as_mut_vec()}, prefix.name());
+                            danger_anguished_string_write(self.out, ":");
+                        }
+                        danger_anguished_string_write(self.out, "[");
+                        let label = regspec_label(&base);
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, label.as_bytes());
+                        danger_anguished_string_write(self.out, " + ");
+                        let label = regspec_label(&index);
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, label.as_bytes());
+                        danger_anguished_string_write(self.out, " * ");
+                        danger_anguished_bstring_write(unsafe { self.out.as_mut_vec() }, &[scale + b'0']);
+                        danger_anguished_string_write(self.out, "]");
+                        Ok(())
+                    }
+                #[cfg_attr(feature="profiling", inline(never))]
+                    fn visit_reg_scale_disp(&mut self, reg: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, mem_size_label(self.inst.mem_size).as_bytes());
+                        danger_anguished_string_write(self.out, " ");
+
+                        if self.op_nr >= 4 {
+                            unsafe { core::hint::unreachable_unchecked(); }
+                        }
+                        if let Some(prefix) = self.inst.segment_override_for_op(self.op_nr) {
+                            danger_anguished_bstring_write(unsafe{self.out.as_mut_vec()}, prefix.name());
+                            danger_anguished_string_write(self.out, ":");
+                        }
+                        danger_anguished_string_write(self.out, "[");
+                        let label = regspec_label(&reg);
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, label.as_bytes());
+                        danger_anguished_string_write(self.out, " * ");
+                        danger_anguished_bstring_write(unsafe { self.out.as_mut_vec() }, &[scale + b'0']);
+                        let mut v = disp as u32;
+                        if disp < 0 {
+                            danger_anguished_string_write(self.out, " - ");
+                            v = -disp as u32;
+                        } else {
+                            danger_anguished_string_write(self.out, " + ");
+                        }
+                        danger_anguished_string_write(self.out, "0x");
+                        let mut buf = [MaybeUninit::<u8>::uninit(); 8];
+                        let mut curr = buf.len();
+                        loop {
+                            let digit = v % 16;
+                            let c = c_to_hex(digit as u8);
+                            curr -= 1;
+                            buf[curr].write(c);
+                            v = v / 16;
+                            if v == 0 {
+                                break;
+                            }
+                        }
+                        let buf = &buf[curr..];
+                        let s = unsafe {
+                            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+                        };
+                        // anguished_string_write(&mut self.out, s);
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, s.as_bytes());
+                        danger_anguished_string_write(self.out, "]");
+                        Ok(())
+                    }
+                #[cfg_attr(feature="profiling", inline(never))]
+                    fn visit_index_base_scale_disp(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, mem_size_label(self.inst.mem_size).as_bytes());
+                        danger_anguished_string_write(self.out, " ");
+
+                        if self.op_nr >= 4 {
+                            unsafe { core::hint::unreachable_unchecked(); }
+                        }
+                        if let Some(prefix) = self.inst.segment_override_for_op(self.op_nr) {
+                            danger_anguished_bstring_write(unsafe{self.out.as_mut_vec()}, prefix.name());
+                            danger_anguished_string_write(self.out, ":");
+                        }
+                        danger_anguished_string_write(self.out, "[");
+                        let label = regspec_label(&base);
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, label.as_bytes());
+                        danger_anguished_string_write(self.out, " + ");
+                        let label = regspec_label(&index);
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, label.as_bytes());
+                        danger_anguished_string_write(self.out, " * ");
+                        danger_anguished_bstring_write(unsafe { self.out.as_mut_vec() }, &[scale + b'0']);
+                        let mut v = disp as u32;
+                        if disp < 0 {
+                            danger_anguished_string_write(self.out, " - ");
+                            v = -disp as u32;
+                        } else {
+                            danger_anguished_string_write(self.out, " + ");
+                        }
+                        danger_anguished_string_write(self.out, "0x");
+                        let mut buf = [MaybeUninit::<u8>::uninit(); 8];
+                        let mut curr = buf.len();
+                        loop {
+                            let digit = v % 16;
+                            let c = c_to_hex(digit as u8);
+                            curr -= 1;
+                            buf[curr].write(c);
+                            v = v / 16;
+                            if v == 0 {
+                                break;
+                            }
+                        }
+                        let buf = &buf[curr..];
+                        let s = unsafe {
+                            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+                        };
+                        danger_anguished_smaller_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, s.as_bytes());
+                        danger_anguished_string_write(self.out, "]");
+                        Ok(())
+                    }
+                    fn visit_other(&mut self) -> Result<Self::Ok, Self::Error> {
+                        Ok(())
+                    }
+                    fn visit_reg_mask_merge(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
+                        Ok(())
+                    }
+                    fn visit_reg_mask_merge_sae(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode, sae_mode: crate::long_mode::SaeMode) -> Result<Self::Ok, Self::Error> {
+                        Ok(())
+                    }
+                    fn visit_reg_mask_merge_sae_noround(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
+                        Ok(())
+                    }
+                    fn visit_reg_disp_masked(&mut self, spec: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                        Ok(())
+                    }
+                    fn visit_reg_deref_masked(&mut self, spec: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                        Ok(())
+                    }
+                    fn visit_reg_scale_masked(&mut self, spec: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                        Ok(())
+                    }
+                    fn visit_reg_scale_disp_masked(&mut self, spec: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                        Ok(())
+                    }
+                    fn visit_index_base_masked(&mut self, base: RegSpec, index: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                        Ok(())
+                    }
+                    fn visit_index_base_disp_masked(&mut self, base: RegSpec, index: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                        Ok(())
+                    }
+                    fn visit_index_base_scale_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                        Ok(())
+                    }
+                    fn visit_index_base_scale_disp_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+                        Ok(())
+                    }
+                }
+
+                let mut printer = OperandPrinter {
+                    out,
+                    inst,
+                    op_nr,
+                    colors,
+                };
+                inst.visit_operand(op_nr, &mut printer)
+            }
+
+            display_op(self, 0, colors, out)?;
+
+            for i in 1..self.operand_count {
+                match self.opcode {
+                    _ => {
+                        match &self.operands[i as usize] {
+                            &OperandSpec::Nothing => {
+                                // should never see a Nothing if we iterate only through
+                                // `operand_count`..
+                                unsafe { crate::long_mode::unreachable_unchecked() }
+                            },
+                            _ => {
+                                danger_anguished_string_write(out, ", ");
+                                display_op(self, i, colors, out)?;
+                                if let Some(evex) = self.prefixes.evex() {
+                                    if evex.broadcast() && false { // x.is_memory() {
+                                        let scale = if self.opcode == Opcode::VCVTPD2PS || self.opcode == Opcode::VCVTTPD2UDQ || self.opcode == Opcode::VCVTPD2UDQ || self.opcode == Opcode::VCVTUDQ2PD || self.opcode == Opcode::VCVTPS2PD || self.opcode == Opcode::VCVTQQ2PS || self.opcode == Opcode::VCVTDQ2PD || self.opcode == Opcode::VCVTTPD2DQ || self.opcode == Opcode::VFPCLASSPS || self.opcode == Opcode::VFPCLASSPD || self.opcode == Opcode::VCVTNEPS2BF16 || self.opcode == Opcode::VCVTUQQ2PS || self.opcode == Opcode::VCVTPD2DQ || self.opcode == Opcode::VCVTTPS2UQQ || self.opcode == Opcode::VCVTPS2UQQ || self.opcode == Opcode::VCVTTPS2QQ || self.opcode == Opcode::VCVTPS2QQ {
+                                            if self.opcode == Opcode::VFPCLASSPS || self.opcode ==  Opcode::VCVTNEPS2BF16 {
+                                                if evex.vex().l() {
+                                                    8
+                                                } else if evex.lp() {
+                                                    16
+                                                } else {
+                                                    4
+                                                }
+                                            } else if self.opcode == Opcode::VFPCLASSPD {
+                                                if evex.vex().l() {
+                                                    4
+                                                } else if evex.lp() {
+                                                    8
+                                                } else {
+                                                    2
+                                                }
+                                            } else {
+                                                // vcvtpd2ps is "cool": in broadcast mode, it can read a
+                                                // double-precision float (qword), resize to single-precision,
+                                                // then broadcast that to the whole destination register. this
+                                                // means we need to show `xmm, qword [addr]{1to4}` if vector
+                                                // size is 256. likewise, scale of 8 for the same truncation
+                                                // reason if vector size is 512.
+                                                // vcvtudq2pd is the same story.
+                                                // vfpclassp{s,d} is a mystery to me.
+                                                if evex.vex().l() {
+                                                    4
+                                                } else if evex.lp() {
+                                                    8
+                                                } else {
+                                                    2
+                                                }
+                                            }
+                                        } else {
+                                            // this should never be `None` - that would imply two
+                                            // memory operands for a broadcasted operation.
+                                            if let Some(width) = Operand::from_spec(self, self.operands[i as usize - 1]).width() {
+                                                width / self.mem_size
+                                            } else {
+                                                0
+                                            }
+                                        };
+                                        write!(out, "{{1to{}}}", scale)?;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn write_to<T: fmt::Write>(&self, out: &mut T) -> fmt::Result {
         self.display_with(DisplayStyle::Intel).contextualize(&NoColors, 0, Some(&NoContext), out)
     }

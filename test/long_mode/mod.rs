@@ -62,6 +62,19 @@ fn test_display_under(decoder: &InstDecoder, data: &[u8], expected: &'static str
                         text,
                         expected
                     );
+                    /*
+                    let mut text2 = String::new();
+                    instr.write_2(&mut text2);
+                    assert!(
+                        text2 == text,
+                        "display error for {}:\n  decoded: {:?} under decoder {}\n displayed: {}\n expected: {}\n",
+                        hex,
+                        instr,
+                        decoder,
+                        text2,
+                        text,
+                    );
+                    */
                 } else {
                     eprintln!("non-fmt build cannot compare text equality")
                 }
