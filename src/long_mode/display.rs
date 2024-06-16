@@ -4792,14 +4792,6 @@ fn contextualize_intel<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors:
 
     out.write_str(instr.opcode.name())?;
 
-    if instr.opcode == Opcode::XBEGIN {
-        if (instr.imm as i32) >= 0 {
-            return write!(out, " $+{}", colors.number(signed_i32_hex(instr.imm as i32)));
-        } else {
-            return write!(out, " ${}", colors.number(signed_i32_hex(instr.imm as i32)));
-        }
-    }
-
     if instr.operand_count > 0 {
         out.write_str(" ")?;
 
