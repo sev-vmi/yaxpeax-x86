@@ -450,13 +450,20 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         Ok(())
     }
     fn visit_reg(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
-        self.f.write_str(regspec_label(&reg))
+        self.f.span_enter(TokenType::Register);
+        self.f.write_str(regspec_label(&reg))?;
+        self.f.span_end(TokenType::Register);
+        Ok(())
     }
     fn visit_reg_mask_merge(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
+        self.f.span_enter(TokenType::Register);
         self.f.write_str(regspec_label(&spec))?;
+        self.f.span_end(TokenType::Register);
         if mask.num != 0 {
             self.f.write_str("{")?;
+            self.f.span_enter(TokenType::Register);
             self.f.write_str(regspec_label(&mask))?;
+            self.f.span_end(TokenType::Register);
             self.f.write_str("}")?;
         }
         if let MergeMode::Zero = merge_mode {
