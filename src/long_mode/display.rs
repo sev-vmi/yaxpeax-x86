@@ -362,6 +362,34 @@ impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for Operand {
     }
 }
 
+enum TokenType {
+    Mnemonic,
+    Operand,
+    Immediate,
+    Register,
+    Offset,
+}
+
+trait DisplaySink: fmt::Write {
+//    fn write_str(&mut self, s: &str) -> Result<(), core::fmt::Error>;
+//    fn write_char(&mut self, c: char) -> Result<(), core::fmt::Error>;
+    fn span_enter(&mut self, ty: TokenType);
+    fn span_end(&mut self, ty: TokenType);
+}
+
+impl<T: fmt::Write> DisplaySink for T {
+    /*
+    fn write_str(&mut self) -> Result<(), core::fmt::Error> {
+        <Self as fmt::Write>::write_str(self, s)
+    }
+    fn write_char(&mut self) -> Result<(), core::fmt::Error> {
+        <Self as fmt::Write>::write_char(self, c)
+    }
+    */
+    fn span_enter(&mut self, _ty: TokenType) { }
+    fn span_end(&mut self, _ty: TokenType) { }
+}
+
 struct ColorizingOperandVisitor<'a, T, Y> {
     instr: &'a Instruction,
     op_nr: u8,
@@ -369,37 +397,57 @@ struct ColorizingOperandVisitor<'a, T, Y> {
     f: &'a mut T,
 }
 
-impl <T: fmt::Write, Y: YaxColors> crate::long_mode::OperandVisitor for ColorizingOperandVisitor<'_, T, Y> {
+impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for ColorizingOperandVisitor<'_, T, Y> {
     type Ok = ();
     type Error = core::fmt::Error;
 
     fn visit_u8(&mut self, imm: u8) -> Result<Self::Ok, Self::Error> {
-        write!(self.f, "{}", self.colors.number(u8_hex(imm)))
+        self.f.span_enter(TokenType::Immediate);
+        write!(self.f, "{}", u8_hex(imm))?;
+        self.f.span_end(TokenType::Immediate);
+        Ok(())
     }
     fn visit_i8(&mut self, imm: i8) -> Result<Self::Ok, Self::Error> {
-        write!(self.f, "{}",
-            self.colors.number(signed_i8_hex(imm)))
+        self.f.span_enter(TokenType::Immediate);
+        write!(self.f, "{}", signed_i8_hex(imm))?;
+        self.f.span_end(TokenType::Immediate);
+        Ok(())
     }
     fn visit_u16(&mut self, imm: u16) -> Result<Self::Ok, Self::Error> {
-        write!(self.f, "{}", self.colors.number(u16_hex(imm)))
+        self.f.span_enter(TokenType::Immediate);
+        write!(self.f, "{}", u16_hex(imm))?;
+        self.f.span_end(TokenType::Immediate);
+        Ok(())
     }
     fn visit_i16(&mut self, imm: i16) -> Result<Self::Ok, Self::Error> {
-        write!(self.f, "{}",
-            self.colors.number(signed_i16_hex(imm)))
+        self.f.span_enter(TokenType::Immediate);
+        write!(self.f, "{}", signed_i16_hex(imm))?;
+        self.f.span_end(TokenType::Immediate);
+        Ok(())
     }
     fn visit_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
-        write!(self.f, "{}", self.colors.number(u32_hex(imm)))
+        self.f.span_enter(TokenType::Immediate);
+        write!(self.f, "{}", u32_hex(imm))?;
+        self.f.span_end(TokenType::Immediate);
+        Ok(())
     }
     fn visit_i32(&mut self, imm: i32) -> Result<Self::Ok, Self::Error> {
-        write!(self.f, "{}",
-            self.colors.number(signed_i32_hex(imm)))
+        self.f.span_enter(TokenType::Immediate);
+        write!(self.f, "{}", signed_i32_hex(imm))?;
+        self.f.span_end(TokenType::Immediate);
+        Ok(())
     }
     fn visit_u64(&mut self, imm: u64) -> Result<Self::Ok, Self::Error> {
-        write!(self.f, "{}", self.colors.number(u64_hex(imm)))
+        self.f.span_enter(TokenType::Immediate);
+        write!(self.f, "{}", u64_hex(imm))?;
+        self.f.span_end(TokenType::Immediate);
+        Ok(())
     }
     fn visit_i64(&mut self, imm: i64) -> Result<Self::Ok, Self::Error> {
-        write!(self.f, "{}",
-            self.colors.number(signed_i64_hex(imm)))
+        self.f.span_enter(TokenType::Immediate);
+        write!(self.f, "{}", signed_i64_hex(imm))?;
+        self.f.span_end(TokenType::Immediate);
+        Ok(())
     }
     fn visit_reg(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(regspec_label(&reg))
