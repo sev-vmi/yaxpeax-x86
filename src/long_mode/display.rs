@@ -1315,7 +1315,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
             };
 
             // not actually fixed size, but this should optimize right i hope..
-            self.f.write_fixed_size(s)?;
+            unsafe { self.f.write_lt_16(s)?; }
         }
         self.f.write_fixed_size("]")
     }
@@ -1390,7 +1390,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
             };
 
             // not actually fixed size, but this should optimize right i hope..
-            self.f.write_fixed_size(s)?;
+            unsafe { self.f.write_lt_16(s)?; }
         }
         write!(self.f, "]")
     }
@@ -1454,7 +1454,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
             };
 
             // not actually fixed size, but this should optimize right i hope..
-            self.f.write_fixed_size(s)?;
+            unsafe { self.f.write_lt_16(s)?; }
         }
         self.f.write_fixed_size("]")
     }
