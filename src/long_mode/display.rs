@@ -1284,10 +1284,13 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
             self.f.write_char(name[1] as char)?;
             self.f.write_char(':')?;
         }
-        write!(self.f, "[{} * {}]",
-            regspec_label(&reg),
-            self.colors.number(scale)
-        )
+        self.f.write_fixed_size("[")?;
+        unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
+        self.f.write_fixed_size(" * ")?;
+        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_fixed_size("]")?;
+
+        Ok(())
     }
     fn visit_reg_scale_disp(&mut self, reg: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
@@ -1298,11 +1301,40 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
             self.f.write_char(name[1] as char)?;
             self.f.write_char(':')?;
         }
-        write!(self.f, "[{} * {} ",
-            regspec_label(&reg),
-            self.colors.number(scale),
-        )?;
-        format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
+        self.f.write_fixed_size("[")?;
+        unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
+        self.f.write_fixed_size(" * ")?;
+        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_fixed_size(" ")?;
+
+        {
+            let mut v = disp as u32;
+            if disp < 0 {
+                self.f.write_fixed_size("- 0x")?;
+                v = -disp as u32;
+            } else {
+                self.f.write_fixed_size("+ 0x")?;
+            }
+            let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 8];
+            let mut curr = buf.len();
+            loop {
+                let digit = v % 16;
+                let c = c_to_hex(digit as u8);
+                curr -= 1;
+                buf[curr].write(c);
+                v = v / 16;
+                if v == 0 {
+                    break;
+                }
+            }
+            let buf = &buf[curr..];
+            let s = unsafe {
+                core::mem::transmute::<&[core::mem::MaybeUninit<u8>], &str>(buf)
+            };
+
+            // not actually fixed size, but this should optimize right i hope..
+            self.f.write_fixed_size(s)?;
+        }
         write!(self.f, "]")
     }
     fn visit_index_base_scale(&mut self, base: RegSpec, index: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
@@ -1314,11 +1346,13 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
             self.f.write_char(name[1] as char)?;
             self.f.write_char(':')?;
         }
-        write!(self.f, "[{} + {} * {}]",
-            regspec_label(&base),
-            regspec_label(&index),
-            self.colors.number(scale)
-        )
+        self.f.write_fixed_size("[")?;
+        unsafe { self.f.write_lt_8(regspec_label(&base))?; }
+        self.f.write_fixed_size(" + ")?;
+        unsafe { self.f.write_lt_8(regspec_label(&index))?; }
+        self.f.write_fixed_size(" * ")?;
+        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_fixed_size("]")
     }
     fn visit_index_base_scale_disp(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
@@ -1329,13 +1363,43 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
             self.f.write_char(name[1] as char)?;
             self.f.write_char(':')?;
         }
-        write!(self.f, "[{} + {} * {} ",
-            regspec_label(&base),
-            regspec_label(&index),
-            self.colors.number(scale),
-        )?;
-        format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-        write!(self.f, "]")
+        self.f.write_fixed_size("[")?;
+        unsafe { self.f.write_lt_8(regspec_label(&base))?; }
+        self.f.write_fixed_size(" + ")?;
+        unsafe { self.f.write_lt_8(regspec_label(&index))?; }
+        self.f.write_fixed_size(" * ")?;
+        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_fixed_size(" ")?;
+
+        {
+            let mut v = disp as u32;
+            if disp < 0 {
+                self.f.write_fixed_size("- 0x")?;
+                v = -disp as u32;
+            } else {
+                self.f.write_fixed_size("+ 0x")?;
+            }
+            let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 8];
+            let mut curr = buf.len();
+            loop {
+                let digit = v % 16;
+                let c = c_to_hex(digit as u8);
+                curr -= 1;
+                buf[curr].write(c);
+                v = v / 16;
+                if v == 0 {
+                    break;
+                }
+            }
+            let buf = &buf[curr..];
+            let s = unsafe {
+                core::mem::transmute::<&[core::mem::MaybeUninit<u8>], &str>(buf)
+            };
+
+            // not actually fixed size, but this should optimize right i hope..
+            self.f.write_fixed_size(s)?;
+        }
+        self.f.write_fixed_size("]")
     }
     fn visit_reg_disp_masked(&mut self, spec: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
