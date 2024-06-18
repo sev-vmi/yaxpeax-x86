@@ -379,6 +379,34 @@ pub trait DisplaySink: fmt::Write {
         }
         Ok(())
     }
+    /// write a string to this sink that is less than 32 bytes. this is provided for optimization
+    /// opportunities when writing a variable-length string with known max size.
+    ///
+    /// SAFETY: the provided `s` must be less than 32 bytes. if the provided string is longer than
+    /// 31 bytes, implementations may only copy part of a multi-byte codepoint while writing to a
+    /// utf-8 string. this may corrupt Rust strings.
+    unsafe fn write_lt_32(&mut self, s: &str) -> Result<(), core::fmt::Error> {
+        self.write_str(s)
+
+    }
+    /// write a string to this sink that is less than 16 bytes. this is provided for optimization
+    /// opportunities when writing a variable-length string with known max size.
+    ///
+    /// SAFETY: the provided `s` must be less than 16 bytes. if the provided string is longer than
+    /// 15 bytes, implementations may only copy part of a multi-byte codepoint while writing to a
+    /// utf-8 string. this may corrupt Rust strings.
+    unsafe fn write_lt_16(&mut self, s: &str) -> Result<(), core::fmt::Error> {
+        self.write_str(s)
+    }
+    /// write a string to this sink that is less than 8 bytes. this is provided for optimization
+    /// opportunities when writing a variable-length string with known max size.
+    ///
+    /// SAFETY: the provided `s` must be less than 8 bytes. if the provided string is longer than
+    /// 7 bytes, implementations may only copy part of a multi-byte codepoint while writing to a
+    /// utf-8 string. this may corrupt Rust strings.
+    unsafe fn write_lt_8(&mut self, s: &str) -> Result<(), core::fmt::Error> {
+        self.write_str(s)
+    }
     // fn write_char(&mut self, c: char) -> Result<(), core::fmt::Error>;
     fn span_enter(&mut self, ty: TokenType);
     fn span_end(&mut self, ty: TokenType);
@@ -429,8 +457,26 @@ pub struct BigEnoughString {
 // clearly states requirements
 impl fmt::Write for BigEnoughString {
     fn write_str(&mut self, s: &str) -> Result<(), core::fmt::Error> {
+        self.content.write_str(s)
+    }
+    fn write_char(&mut self, c: char) -> Result<(), core::fmt::Error> {
+        // SAFETY: TODO: goodness, what
+        unsafe {
+            let underlying = self.content.as_mut_vec();
+            underlying.as_mut_ptr().offset(underlying.len() as isize).write(c as u8);
+            underlying.set_len(underlying.len() + 1);
+        }
+        Ok(())
+    }
+}
+
+// TODO: delete this whole thing? maybe?
+impl DisplaySink for alloc::string::String {
+    unsafe fn write_lt_32(&mut self, s: &str) -> Result<(), fmt::Error> {
+        self.reserve(s.len());
+
         // SAFETY: todo
-        let buf = unsafe { self.content.as_mut_vec() };
+        let buf = unsafe { self.as_mut_vec() };
         let new_bytes = s.as_bytes();
 
         // should get DCE
@@ -443,51 +489,11 @@ impl fmt::Write for BigEnoughString {
         }
 
         unsafe {
-        let dest = buf.as_mut_ptr().offset(buf.len() as isize);
-        let src = new_bytes.as_ptr();
+            let dest = buf.as_mut_ptr().offset(buf.len() as isize);
+            let src = new_bytes.as_ptr();
 
-        let mut rem = new_bytes.len() as isize;
-        unsafe {
-            buf.set_len(buf.len() + new_bytes.len());
-        }
-        /*
-        while rem % 4 > 0 {
-            dest.offset(rem - 1).write_unaligned(src.offset(rem - 1).read_unaligned());
-            rem -= 1;
-        }
+            let mut rem = new_bytes.len() as isize;
 
-        while rem > 0 {
-            (dest.offset(rem - 4) as *mut u32).write_unaligned(unsafe {
-                *core::mem::transmute::<&u8, &u32>(&new_bytes[rem as usize - 4])
-            });
-            rem -= 4;
-        }
-        */
-        unsafe {
-            /*
-            if rem >= 8 {
-                rem -= 8;
-                (dest.offset(rem) as *mut u64).write_unaligned((src.offset(rem) as *const u64).read_unaligned())
-            }
-            if rem >= 4 {
-                rem -= 4;
-                (dest.offset(rem) as *mut u32).write_unaligned((src.offset(rem) as *const u32).read_unaligned());
-                if rem == 0 {
-                    return;
-                }
-            }
-            if rem >= 2 {
-                rem -= 2;
-                (dest.offset(rem) as *mut u16).write_unaligned((src.offset(rem) as *const u16).read_unaligned());
-                if rem == 0 {
-                    return;
-                }
-            }
-            if rem >= 1 {
-                rem -= 1;
-                (dest.offset(rem) as *mut u8).write_unaligned((src.offset(rem) as *const u8).read_unaligned())
-            }
-            */
             core::arch::asm!(
                 "6:",
                 "cmp {rem:e}, 16",
@@ -528,69 +534,12 @@ impl fmt::Write for BigEnoughString {
                 src = in(reg) src,
                 dest = in(reg) dest,
                 rem = inout(reg) rem => _,
-//                    tmp = out(reg) _,
                 buf = out(reg) _,
                 options(nostack),
             );
+
+            buf.set_len(buf.len() + new_bytes.len());
         }
-        /*
-        unsafe {
-            core::arch::asm!(
-                "7:",
-                "cmp {rem:e}, 4",
-                "jb 8f",
-                "sub {rem:e}, 4",
-                "mov {buf:e}, dword ptr [{src} + {rem}]",
-                "mov dword ptr [{dest} + {rem}], {buf:e}",
-                "jmp 7b",
-                "8:",
-                "test {rem:e}, {rem:e}",
-                "jz 10f",
-                "sub {rem:e}, 1",
-                "mov {buf:l}, byte ptr [{src} + {rem}]",
-                "mov byte ptr [{dest} + {rem}], {buf:l}",
-                "jnz 8b",
-                "10:",
-                src = in(reg) src,
-                dest = in(reg) dest,
-                rem = in(reg) rem,
-//                    tmp = out(reg) _,
-                buf = out(reg) _,
-                options(nostack),
-            );
-        }
-        */
-        /*
-        unsafe {
-            core::arch::asm!(
-                "mov {tmp}, {rem}",
-                "and {tmp}, 3",
-                "je 3f",
-                "sub {rem}, {tmp}",
-                "2:",
-                "mov {buf:l}, byte ptr [{src}]",
-                "mov byte ptr [{dest}], {buf:l}",
-                "add {src}, 1",
-                "add {dest}, 1",
-                "sub {tmp}, 1",
-                "jnz 2b",
-                "3:",
-                "test {rem}, {rem}",
-                "jz 5f",
-                "4:",
-                "sub {rem}, 4",
-                "mov {buf:e}, dword ptr [{src} + {rem}]",
-                "mov dword ptr [{dest} + {rem}], {buf:e}",
-                "jnz 4b",
-                "5:",
-                src = in(reg) src,
-                dest = in(reg) dest,
-                rem = in(reg) rem,
-                tmp = out(reg) _,
-                buf = out(reg) _,
-            );
-        }
-        */
         /*
         for i in 0..new_bytes.len() {
             unsafe {
@@ -598,22 +547,348 @@ impl fmt::Write for BigEnoughString {
             }
         }
         */
-        }
 
         Ok(())
     }
-    fn write_char(&mut self, c: char) -> Result<(), core::fmt::Error> {
-        // SAFETY: TODO: goodness, what
-        unsafe {
-            let underlying = self.content.as_mut_vec();
-            underlying.as_mut_ptr().offset(underlying.len() as isize).write(c as u8);
-            underlying.set_len(underlying.len() + 1);
+    unsafe fn write_lt_16(&mut self, s: &str) -> Result<(), fmt::Error> {
+        self.reserve(s.len());
+
+        // SAFETY: todo
+        let buf = unsafe { self.as_mut_vec() };
+        let new_bytes = s.as_bytes();
+
+        // should get DCE
+        if new_bytes.len() >= 16 {
+            unsafe { core::hint::unreachable_unchecked() }
         }
+        // should get DCE
+        if new_bytes.len() == 0 {
+            unsafe { core::hint::unreachable_unchecked() }
+        }
+
+        unsafe {
+            let dest = buf.as_mut_ptr().offset(buf.len() as isize);
+            let src = new_bytes.as_ptr();
+
+            let mut rem = new_bytes.len() as isize;
+
+            core::arch::asm!(
+                "7:",
+                "cmp {rem:e}, 8",
+                "jb 8f",
+                "mov {buf:r}, qword ptr [{src} + {rem} - 8]",
+                "mov qword ptr [{dest} + {rem} - 8], {buf:r}",
+                "sub {rem:e}, 8",
+                "jz 11f",
+                "8:",
+                "cmp {rem:e}, 4",
+                "jb 9f",
+                "mov {buf:e}, dword ptr [{src} + {rem} - 4]",
+                "mov dword ptr [{dest} + {rem} - 4], {buf:e}",
+                "sub {rem:e}, 4",
+                "jz 11f",
+                "9:",
+                "cmp {rem:e}, 2",
+                "jb 10f",
+                "mov {buf:x}, word ptr [{src} + {rem} - 2]",
+                "mov word ptr [{dest} + {rem} - 2], {buf:x}",
+                "sub {rem:e}, 2",
+                "jz 11f",
+                "10:",
+                "cmp {rem:e}, 1",
+                "jb 11f",
+                "mov {buf:l}, byte ptr [{src} + {rem} - 1]",
+                "mov byte ptr [{dest} + {rem} - 1], {buf:l}",
+                "11:",
+                src = in(reg) src,
+                dest = in(reg) dest,
+                rem = inout(reg) rem => _,
+                buf = out(reg) _,
+                options(nostack),
+            );
+
+            buf.set_len(buf.len() + new_bytes.len());
+        }
+        /*
+        for i in 0..new_bytes.len() {
+            unsafe {
+                buf.as_mut_ptr().offset(buf.len() as isize).offset(i as isize).write_volatile(new_bytes[i]);
+            }
+        }
+        */
+
         Ok(())
     }
+    unsafe fn write_lt_8(&mut self, s: &str) -> Result<(), fmt::Error> {
+        self.reserve(s.len());
+
+        // SAFETY: todo
+        let buf = unsafe { self.as_mut_vec() };
+        let new_bytes = s.as_bytes();
+
+        // should get DCE
+        if new_bytes.len() >= 8 {
+            unsafe { core::hint::unreachable_unchecked() }
+        }
+        // should get DCE
+        if new_bytes.len() == 0 {
+            unsafe { core::hint::unreachable_unchecked() }
+        }
+
+        unsafe {
+            let dest = buf.as_mut_ptr().offset(buf.len() as isize);
+            let src = new_bytes.as_ptr();
+
+            let mut rem = new_bytes.len() as isize;
+
+            core::arch::asm!(
+                "8:",
+                "cmp {rem:e}, 4",
+                "jb 9f",
+                "mov {buf:e}, dword ptr [{src} + {rem} - 4]",
+                "mov dword ptr [{dest} + {rem} - 4], {buf:e}",
+                "sub {rem:e}, 4",
+                "jz 11f",
+                "9:",
+                "cmp {rem:e}, 2",
+                "jb 10f",
+                "mov {buf:x}, word ptr [{src} + {rem} - 2]",
+                "mov word ptr [{dest} + {rem} - 2], {buf:x}",
+                "sub {rem:e}, 2",
+                "jz 11f",
+                "10:",
+                "cmp {rem:e}, 1",
+                "jb 11f",
+                "mov {buf:l}, byte ptr [{src} + {rem} - 1]",
+                "mov byte ptr [{dest} + {rem} - 1], {buf:l}",
+                "11:",
+                src = in(reg) src,
+                dest = in(reg) dest,
+                rem = inout(reg) rem => _,
+                buf = out(reg) _,
+                options(nostack),
+            );
+
+            buf.set_len(buf.len() + new_bytes.len());
+        }
+        /*
+        for i in 0..new_bytes.len() {
+            unsafe {
+                buf.as_mut_ptr().offset(buf.len() as isize).offset(i as isize).write_volatile(new_bytes[i]);
+            }
+        }
+        */
+
+        Ok(())
+    }
+    fn span_enter(&mut self, ty: TokenType) {}
+    fn span_end(&mut self, ty: TokenType) {}
 }
 
 impl DisplaySink for BigEnoughString {
+    unsafe fn write_lt_32(&mut self, s: &str) -> Result<(), fmt::Error> {
+        // SAFETY: todo
+        let buf = unsafe { self.content.as_mut_vec() };
+        let new_bytes = s.as_bytes();
+
+        // should get DCE
+        if new_bytes.len() >= 32 {
+            unsafe { core::hint::unreachable_unchecked() }
+        }
+        // should get DCE
+        if new_bytes.len() == 0 {
+            unsafe { core::hint::unreachable_unchecked() }
+        }
+
+        unsafe {
+            let dest = buf.as_mut_ptr().offset(buf.len() as isize);
+            let src = new_bytes.as_ptr();
+
+            let mut rem = new_bytes.len() as isize;
+
+            core::arch::asm!(
+                "6:",
+                "cmp {rem:e}, 16",
+                "jb 7f",
+                "mov {buf:r}, qword ptr [{src} + {rem} - 16]",
+                "mov qword ptr [{dest} + {rem} - 16], {buf:r}",
+                "mov {buf:r}, qword ptr [{src} + {rem} - 8]",
+                "mov qword ptr [{dest} + {rem} - 8], {buf:r}",
+                "sub {rem:e}, 16",
+                "jz 11f",
+                "7:",
+                "cmp {rem:e}, 8",
+                "jb 8f",
+                "mov {buf:r}, qword ptr [{src} + {rem} - 8]",
+                "mov qword ptr [{dest} + {rem} - 8], {buf:r}",
+                "sub {rem:e}, 8",
+                "jz 11f",
+                "8:",
+                "cmp {rem:e}, 4",
+                "jb 9f",
+                "mov {buf:e}, dword ptr [{src} + {rem} - 4]",
+                "mov dword ptr [{dest} + {rem} - 4], {buf:e}",
+                "sub {rem:e}, 4",
+                "jz 11f",
+                "9:",
+                "cmp {rem:e}, 2",
+                "jb 10f",
+                "mov {buf:x}, word ptr [{src} + {rem} - 2]",
+                "mov word ptr [{dest} + {rem} - 2], {buf:x}",
+                "sub {rem:e}, 2",
+                "jz 11f",
+                "10:",
+                "cmp {rem:e}, 1",
+                "jb 11f",
+                "mov {buf:l}, byte ptr [{src} + {rem} - 1]",
+                "mov byte ptr [{dest} + {rem} - 1], {buf:l}",
+                "11:",
+                src = in(reg) src,
+                dest = in(reg) dest,
+                rem = inout(reg) rem => _,
+                buf = out(reg) _,
+                options(nostack),
+            );
+
+            buf.set_len(buf.len() + new_bytes.len());
+        }
+        /*
+        for i in 0..new_bytes.len() {
+            unsafe {
+                buf.as_mut_ptr().offset(buf.len() as isize).offset(i as isize).write_volatile(new_bytes[i]);
+            }
+        }
+        */
+
+        Ok(())
+    }
+    unsafe fn write_lt_16(&mut self, s: &str) -> Result<(), fmt::Error> {
+        // SAFETY: todo
+        let buf = unsafe { self.content.as_mut_vec() };
+        let new_bytes = s.as_bytes();
+
+        // should get DCE
+        if new_bytes.len() >= 16 {
+            unsafe { core::hint::unreachable_unchecked() }
+        }
+        // should get DCE
+        if new_bytes.len() == 0 {
+            unsafe { core::hint::unreachable_unchecked() }
+        }
+
+        unsafe {
+            let dest = buf.as_mut_ptr().offset(buf.len() as isize);
+            let src = new_bytes.as_ptr();
+
+            let mut rem = new_bytes.len() as isize;
+
+            core::arch::asm!(
+                "7:",
+                "cmp {rem:e}, 8",
+                "jb 8f",
+                "mov {buf:r}, qword ptr [{src} + {rem} - 8]",
+                "mov qword ptr [{dest} + {rem} - 8], {buf:r}",
+                "sub {rem:e}, 8",
+                "jz 11f",
+                "8:",
+                "cmp {rem:e}, 4",
+                "jb 9f",
+                "mov {buf:e}, dword ptr [{src} + {rem} - 4]",
+                "mov dword ptr [{dest} + {rem} - 4], {buf:e}",
+                "sub {rem:e}, 4",
+                "jz 11f",
+                "9:",
+                "cmp {rem:e}, 2",
+                "jb 10f",
+                "mov {buf:x}, word ptr [{src} + {rem} - 2]",
+                "mov word ptr [{dest} + {rem} - 2], {buf:x}",
+                "sub {rem:e}, 2",
+                "jz 11f",
+                "10:",
+                "cmp {rem:e}, 1",
+                "jb 11f",
+                "mov {buf:l}, byte ptr [{src} + {rem} - 1]",
+                "mov byte ptr [{dest} + {rem} - 1], {buf:l}",
+                "11:",
+                src = in(reg) src,
+                dest = in(reg) dest,
+                rem = inout(reg) rem => _,
+                buf = out(reg) _,
+                options(nostack),
+            );
+
+            buf.set_len(buf.len() + new_bytes.len());
+        }
+        /*
+        for i in 0..new_bytes.len() {
+            unsafe {
+                buf.as_mut_ptr().offset(buf.len() as isize).offset(i as isize).write_volatile(new_bytes[i]);
+            }
+        }
+        */
+
+        Ok(())
+    }
+    unsafe fn write_lt_8(&mut self, s: &str) -> Result<(), fmt::Error> {
+        // SAFETY: todo
+        let buf = unsafe { self.content.as_mut_vec() };
+        let new_bytes = s.as_bytes();
+
+        // should get DCE
+        if new_bytes.len() >= 8 {
+            unsafe { core::hint::unreachable_unchecked() }
+        }
+        // should get DCE
+        if new_bytes.len() == 0 {
+            unsafe { core::hint::unreachable_unchecked() }
+        }
+
+        unsafe {
+            let dest = buf.as_mut_ptr().offset(buf.len() as isize);
+            let src = new_bytes.as_ptr();
+
+            let mut rem = new_bytes.len() as isize;
+
+            core::arch::asm!(
+                "8:",
+                "cmp {rem:e}, 4",
+                "jb 9f",
+                "mov {buf:e}, dword ptr [{src} + {rem} - 4]",
+                "mov dword ptr [{dest} + {rem} - 4], {buf:e}",
+                "sub {rem:e}, 4",
+                "jz 11f",
+                "9:",
+                "cmp {rem:e}, 2",
+                "jb 10f",
+                "mov {buf:x}, word ptr [{src} + {rem} - 2]",
+                "mov word ptr [{dest} + {rem} - 2], {buf:x}",
+                "sub {rem:e}, 2",
+                "jz 11f",
+                "10:",
+                "cmp {rem:e}, 1",
+                "jb 11f",
+                "mov {buf:l}, byte ptr [{src} + {rem} - 1]",
+                "mov byte ptr [{dest} + {rem} - 1], {buf:l}",
+                "11:",
+                src = in(reg) src,
+                dest = in(reg) dest,
+                rem = inout(reg) rem => _,
+                buf = out(reg) _,
+                options(nostack),
+            );
+
+            buf.set_len(buf.len() + new_bytes.len());
+        }
+        /*
+        for i in 0..new_bytes.len() {
+            unsafe {
+                buf.as_mut_ptr().offset(buf.len() as isize).offset(i as isize).write_volatile(new_bytes[i]);
+            }
+        }
+        */
+
+        Ok(())
+    }
     fn span_enter(&mut self, ty: TokenType) {}
     fn span_end(&mut self, ty: TokenType) {}
 }
@@ -702,18 +977,18 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
     }
     fn visit_reg(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Register);
-        self.f.write_str(regspec_label(&reg))?;
+        unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
         self.f.span_end(TokenType::Register);
         Ok(())
     }
     fn visit_reg_mask_merge(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Register);
-        self.f.write_str(regspec_label(&spec))?;
+        unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
         self.f.span_end(TokenType::Register);
         if mask.num != 0 {
             self.f.write_fixed_size("{")?;
             self.f.span_enter(TokenType::Register);
-            self.f.write_str(regspec_label(&mask))?;
+            unsafe { self.f.write_lt_8(regspec_label(&mask))?; }
             self.f.span_end(TokenType::Register);
             self.f.write_fixed_size("}")?;
         }
@@ -726,7 +1001,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         self.f.write_str(regspec_label(&spec))?;
         if mask.num != 0 {
             self.f.write_fixed_size("{")?;
-            self.f.write_str(regspec_label(&mask))?;
+            unsafe { self.f.write_lt_8(regspec_label(&mask))?; }
             self.f.write_fixed_size("}")?;
         }
         if let MergeMode::Zero = merge_mode {
@@ -780,7 +1055,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
             self.f.write_char(':')?;
         }
         self.f.write_fixed_size("[")?;
-        self.f.write_str(regspec_label(&reg))?;
+        unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
         self.f.write_fixed_size(" ")?;
         format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
         self.f.write_fixed_size("]")
@@ -795,7 +1070,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
             self.f.write_char(':')?;
         }
         self.f.write_fixed_size("[")?;
-        self.f.write_str(regspec_label(&reg))?;
+        unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
         self.f.write_fixed_size("]")
     }
     fn visit_reg_scale(&mut self, reg: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
@@ -3958,8 +4233,6 @@ impl Instruction {
     #[cfg_attr(feature="profiling", inline(never))]
     pub fn write_2(&self, out: &mut alloc::string::String) -> fmt::Result {
         use core::fmt::Write;
-
-        unsafe { out.as_mut_vec().reserve(64) };
 
         fn anguished_string_write(out: &mut alloc::string::String, label: &str) {
             let new_bytes = label.as_bytes();
