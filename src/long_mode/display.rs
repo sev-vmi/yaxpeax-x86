@@ -5358,7 +5358,8 @@ fn contextualize_intel<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors:
         }
     }
 
-    out.write_str(instr.opcode.name())?;
+    // TODO: no x86 instruction longer than 32 bytes?
+    unsafe { out.write_lt_32(instr.opcode.name())? };
 
     if instr.operand_count > 0 {
         out.write_fixed_size(" ")?;
@@ -5940,7 +5941,8 @@ impl<'a, Y: YaxColors, F: DisplaySink> crate::long_mode::OperandVisitor for Rela
                 core::mem::transmute::<&[core::mem::MaybeUninit<u8>], &str>(buf)
             };
 
-            self.out.write_str(s)?;
+            // not actually fixed size, but this should optimize right i hope..
+            self.out.write_fixed_size(s)?;
 //            anguished_string_write(&mut self.out, s);
             Ok(true)
         } else {
@@ -5983,7 +5985,8 @@ impl<'a, Y: YaxColors, F: DisplaySink> crate::long_mode::OperandVisitor for Rela
 //                        danger_anguished_string_write(&mut self.out, s);
 
             // danger_anguished_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, s.as_bytes());
-            self.out.write_str(s)?;
+            // not actually fixed size, but this should optimize right i hope..
+            self.out.write_fixed_size(s)?;
             Ok(true)
         } else {
             Ok(false)
