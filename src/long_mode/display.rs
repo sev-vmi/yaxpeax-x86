@@ -1121,7 +1121,31 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
     }
     fn visit_i64(&mut self, imm: i64) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
-        write!(self.f, "{}", signed_i64_hex(imm))?;
+        let mut v = imm as u64;
+        if imm < 0 {
+            self.f.write_char('-')?;
+            v = -imm as u64;
+        }
+        self.f.write_fixed_size("0x")?;
+        let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 64];
+        let mut curr = buf.len();
+        loop {
+            let digit = v % 16;
+            let c = c_to_hex(digit as u8);
+            curr -= 1;
+            buf[curr].write(c);
+            v = v / 16;
+            if v == 0 {
+                break;
+            }
+        }
+        let buf = &buf[curr..];
+        let s = unsafe {
+            core::mem::transmute::<&[core::mem::MaybeUninit<u8>], &str>(buf)
+        };
+
+        // not actually fixed size, but this should optimize right i hope..
+        self.f.write_fixed_size(s)?;
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
@@ -1207,7 +1231,35 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         self.f.write_fixed_size("[")?;
         unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
         self.f.write_fixed_size(" ")?;
-        format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
+
+        {
+            let mut v = disp as u32;
+            if disp < 0 {
+                self.f.write_fixed_size("- 0x")?;
+                v = -disp as u32;
+            } else {
+                self.f.write_fixed_size("+ 0x")?;
+            }
+            let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 8];
+            let mut curr = buf.len();
+            loop {
+                let digit = v % 16;
+                let c = c_to_hex(digit as u8);
+                curr -= 1;
+                buf[curr].write(c);
+                v = v / 16;
+                if v == 0 {
+                    break;
+                }
+            }
+            let buf = &buf[curr..];
+            let s = unsafe {
+                core::mem::transmute::<&[core::mem::MaybeUninit<u8>], &str>(buf)
+            };
+
+            // not actually fixed size, but this should optimize right i hope..
+            self.f.write_fixed_size(s)?;
+        }
         self.f.write_fixed_size("]")
     }
     fn visit_deref(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
