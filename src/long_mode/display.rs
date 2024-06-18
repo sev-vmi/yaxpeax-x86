@@ -371,14 +371,10 @@ pub enum TokenType {
 }
 
 pub trait DisplaySink: fmt::Write {
-    // /// may be optimized for writing strings of variable length.
-    // fn write_str(&mut self, s: &str) -> Result<(), core::fmt::Error>;
     fn write_fixed_size(&mut self, s: &str) -> Result<(), core::fmt::Error> {
-        for c in s.as_bytes().iter() {
-            self.write_char(*c as char)?;
-        }
-        Ok(())
+        self.write_str(s)
     }
+
     /// write a string to this sink that is less than 32 bytes. this is provided for optimization
     /// opportunities when writing a variable-length string with known max size.
     ///
@@ -472,6 +468,37 @@ impl fmt::Write for BigEnoughString {
 
 // TODO: delete this whole thing? maybe?
 impl DisplaySink for alloc::string::String {
+    fn write_fixed_size(&mut self, s: &str) -> Result<(), core::fmt::Error> {
+        self.reserve(s.len());
+        let buf = unsafe { self.as_mut_vec() };
+        let new_bytes = s.as_bytes();
+
+        if new_bytes.len() == 0 {
+            unsafe { core::hint::unreachable_unchecked() }
+        }
+
+        if new_bytes.len() >= 16 {
+            unsafe { core::hint::unreachable_unchecked() }
+        }
+
+        unsafe {
+            let dest = buf.as_mut_ptr().offset(buf.len() as isize);
+            let src = new_bytes.as_ptr();
+
+            let mut rem = new_bytes.len() as isize;
+
+            dest.offset(0 as isize).write(new_bytes[0]);
+            for i in 1..new_bytes.len() {
+                unsafe {
+                    dest.offset(i as isize).write(new_bytes[i]);
+                }
+            }
+
+            buf.set_len(buf.len() + new_bytes.len());
+        }
+
+        Ok(())
+    }
     unsafe fn write_lt_32(&mut self, s: &str) -> Result<(), fmt::Error> {
         self.reserve(s.len());
 
@@ -686,6 +713,36 @@ impl DisplaySink for alloc::string::String {
 }
 
 impl DisplaySink for BigEnoughString {
+    fn write_fixed_size(&mut self, s: &str) -> Result<(), core::fmt::Error> {
+        let buf = unsafe { self.content.as_mut_vec() };
+        let new_bytes = s.as_bytes();
+
+        if new_bytes.len() == 0 {
+            unsafe { core::hint::unreachable_unchecked() }
+        }
+
+        if new_bytes.len() >= 16 {
+            unsafe { core::hint::unreachable_unchecked() }
+        }
+
+        unsafe {
+            let dest = buf.as_mut_ptr().offset(buf.len() as isize);
+            let src = new_bytes.as_ptr();
+
+            let mut rem = new_bytes.len() as isize;
+
+            dest.offset(0 as isize).write(new_bytes[0]);
+            for i in 1..new_bytes.len() {
+                unsafe {
+                    dest.offset(i as isize).write(new_bytes[i]);
+                }
+            }
+
+            buf.set_len(buf.len() + new_bytes.len());
+        }
+
+        Ok(())
+    }
     unsafe fn write_lt_32(&mut self, s: &str) -> Result<(), fmt::Error> {
         // SAFETY: todo
         let buf = unsafe { self.content.as_mut_vec() };
