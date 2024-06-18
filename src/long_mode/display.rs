@@ -5646,17 +5646,12 @@ impl Instruction {
     }
 
     pub fn write_to<T: DisplaySink>(&self, out: &mut T) -> fmt::Result {
-        self.display_with(DisplayStyle::Intel).contextualize(&NoColors, 0, Some(&NoContext), out)
+        contextualize_intel(self, &NoColors, 0, Some(&NoContext), out)
+//        self.display_with(DisplayStyle::Intel).contextualize(&NoColors, 0, Some(&NoContext), out)
     }
 }
 
-fn contextualize_intel<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors: &Y, _address: u64, _context: Option<&NoContext>, out: &mut T) -> fmt::Result {
-    let mut out = NoColorsSink {
-        out,
-    };
-    let mut out = &mut out;
-    use core::fmt::Write;
-
+fn contextualize_intel<T: DisplaySink, Y: YaxColors>(instr: &Instruction, colors: &Y, _address: u64, _context: Option<&NoContext>, out: &mut T) -> fmt::Result {
     if instr.xacquire() {
         out.write_fixed_size("xacquire ")?;
     }
@@ -6107,6 +6102,11 @@ impl <'instr, T: fmt::Write, Y: YaxColors> ShowContextual<u64, NoContext, T, Y> 
 
         match style {
             DisplayStyle::Intel => {
+                let mut out = NoColorsSink {
+                    out,
+                };
+                let mut out = &mut out;
+
                 contextualize_intel(instr, colors, address, context, out)
             }
             DisplayStyle::C => {
