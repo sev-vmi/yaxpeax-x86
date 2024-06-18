@@ -927,49 +927,195 @@ struct ColorizingOperandVisitor<'a, T, Y> {
     f: &'a mut T,
 }
 
+use core::mem::MaybeUninit;
+
 impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for ColorizingOperandVisitor<'_, T, Y> {
     type Ok = ();
     type Error = core::fmt::Error;
 
     fn visit_u8(&mut self, imm: u8) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
-        write!(self.f, "{}", u8_hex(imm))?;
+        self.f.write_fixed_size("0x")?;
+        let mut buf = [MaybeUninit::<u8>::uninit(); 2];
+        let mut curr = buf.len();
+        let mut v = imm;
+        loop {
+            let digit = v % 16;
+            let c = c_to_hex(digit as u8);
+            curr -= 1;
+            buf[curr].write(c);
+            v = v / 16;
+            if v == 0 {
+                break;
+            }
+        }
+        let buf = &buf[curr..];
+        let s: &str = unsafe {
+            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+        };
+        self.f.write_fixed_size(s)?;
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
     fn visit_i8(&mut self, imm: i8) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
-        write!(self.f, "{}", signed_i8_hex(imm))?;
+        let mut v = imm as u8;
+        if imm < 0 {
+            self.f.write_char('-')?;
+            v = -imm as u8;
+        }
+        self.f.write_fixed_size("0x")?;
+        let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 2];
+        let mut curr = buf.len();
+        loop {
+            let digit = v % 16;
+            let c = c_to_hex(digit as u8);
+            curr -= 1;
+            buf[curr].write(c);
+            v = v / 16;
+            if v == 0 {
+                break;
+            }
+        }
+        let buf = &buf[curr..];
+        let s = unsafe {
+            core::mem::transmute::<&[core::mem::MaybeUninit<u8>], &str>(buf)
+        };
+
+        // not actually fixed size, but this should optimize right i hope..
+        self.f.write_fixed_size(s)?;
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
     fn visit_u16(&mut self, imm: u16) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
-        write!(self.f, "{}", u16_hex(imm))?;
+        self.f.write_fixed_size("0x")?;
+        let mut buf = [MaybeUninit::<u8>::uninit(); 4];
+        let mut curr = buf.len();
+        let mut v = imm;
+        loop {
+            let digit = v % 16;
+            let c = c_to_hex(digit as u8);
+            curr -= 1;
+            buf[curr].write(c);
+            v = v / 16;
+            if v == 0 {
+                break;
+            }
+        }
+        let buf = &buf[curr..];
+        let s: &str = unsafe {
+            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+        };
+        self.f.write_fixed_size(s)?;
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
     fn visit_i16(&mut self, imm: i16) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
-        write!(self.f, "{}", signed_i16_hex(imm))?;
+        let mut v = imm as u16;
+        if imm < 0 {
+            self.f.write_char('-')?;
+            v = -imm as u16;
+        }
+        self.f.write_fixed_size("0x")?;
+        let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 4];
+        let mut curr = buf.len();
+        loop {
+            let digit = v % 16;
+            let c = c_to_hex(digit as u8);
+            curr -= 1;
+            buf[curr].write(c);
+            v = v / 16;
+            if v == 0 {
+                break;
+            }
+        }
+        let buf = &buf[curr..];
+        let s = unsafe {
+            core::mem::transmute::<&[core::mem::MaybeUninit<u8>], &str>(buf)
+        };
+
+        // not actually fixed size, but this should optimize right i hope..
+        self.f.write_fixed_size(s)?;
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
     fn visit_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
-        write!(self.f, "{}", u32_hex(imm))?;
+        self.f.write_fixed_size("0x")?;
+        let mut buf = [MaybeUninit::<u8>::uninit(); 8];
+        let mut curr = buf.len();
+        let mut v = imm;
+        loop {
+            let digit = v % 16;
+            let c = c_to_hex(digit as u8);
+            curr -= 1;
+            buf[curr].write(c);
+            v = v / 16;
+            if v == 0 {
+                break;
+            }
+        }
+        let buf = &buf[curr..];
+        let s: &str = unsafe {
+            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+        };
+        self.f.write_fixed_size(s)?;
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
     fn visit_i32(&mut self, imm: i32) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
-        write!(self.f, "{}", signed_i32_hex(imm))?;
+        let mut v = imm as u32;
+        if imm < 0 {
+            self.f.write_char('-')?;
+            v = -imm as u32;
+        }
+        self.f.write_fixed_size("0x")?;
+        let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 8];
+        let mut curr = buf.len();
+        loop {
+            let digit = v % 16;
+            let c = c_to_hex(digit as u8);
+            curr -= 1;
+            buf[curr].write(c);
+            v = v / 16;
+            if v == 0 {
+                break;
+            }
+        }
+        let buf = &buf[curr..];
+        let s = unsafe {
+            core::mem::transmute::<&[core::mem::MaybeUninit<u8>], &str>(buf)
+        };
+
+        // not actually fixed size, but this should optimize right i hope..
+        self.f.write_fixed_size(s)?;
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
     fn visit_u64(&mut self, imm: u64) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
-        write!(self.f, "{}", u64_hex(imm))?;
+        self.f.write_fixed_size("0x")?;
+        let mut buf = [MaybeUninit::<u8>::uninit(); 16];
+        let mut curr = buf.len();
+        let mut v = imm;
+        loop {
+            let digit = v % 16;
+            let c = c_to_hex(digit as u8);
+            curr -= 1;
+            buf[curr].write(c);
+            v = v / 16;
+            if v == 0 {
+                break;
+            }
+        }
+        let buf = &buf[curr..];
+        let s: &str = unsafe {
+            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
+        };
+        self.f.write_fixed_size(s)?;
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
