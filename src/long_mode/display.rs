@@ -894,6 +894,10 @@ impl DisplaySink for BigEnoughString {
 }
 
 impl BigEnoughString {
+    pub fn clear(&mut self) {
+        self.content.clear();
+    }
+
     pub fn into_inner(self) -> alloc::string::String {
         self.content
     }
