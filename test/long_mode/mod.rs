@@ -62,9 +62,14 @@ fn test_display_under(decoder: &InstDecoder, data: &[u8], expected: &'static str
                         text,
                         expected
                     );
-                    /*
-                    let mut text2 = String::new();
-                    instr.write_2(&mut text2);
+                    let mut text2 = yaxpeax_x86::long_mode::BigEnoughString::new();
+                    let mut out = yaxpeax_x86::long_mode::NoColorsSink {
+                        out: &mut text2,
+                    };
+                    instr.write_to(&mut out);
+                    core::mem::drop(out);
+                    let text2 = text2.into_inner();
+
                     assert!(
                         text2 == text,
                         "display error for {}:\n  decoded: {:?} under decoder {}\n displayed: {}\n expected: {}\n",
@@ -74,7 +79,6 @@ fn test_display_under(decoder: &InstDecoder, data: &[u8], expected: &'static str
                         text2,
                         text,
                     );
-                    */
                 } else {
                     eprintln!("non-fmt build cannot compare text equality")
                 }

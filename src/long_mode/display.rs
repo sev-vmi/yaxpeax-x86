@@ -362,7 +362,7 @@ impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for Operand {
     }
 }
 
-enum TokenType {
+pub enum TokenType {
     Mnemonic,
     Operand,
     Immediate,
@@ -370,14 +370,44 @@ enum TokenType {
     Offset,
 }
 
-trait DisplaySink: fmt::Write {
-//    fn write_str(&mut self, s: &str) -> Result<(), core::fmt::Error>;
-//    fn write_char(&mut self, c: char) -> Result<(), core::fmt::Error>;
+pub trait DisplaySink: fmt::Write {
+    // /// may be optimized for writing strings of variable length.
+    // fn write_str(&mut self, s: &str) -> Result<(), core::fmt::Error>;
+    fn write_fixed_size(&mut self, s: &str) -> Result<(), core::fmt::Error> {
+        for c in s.as_bytes().iter() {
+            self.write_char(*c as char)?;
+        }
+        Ok(())
+    }
+    // fn write_char(&mut self, c: char) -> Result<(), core::fmt::Error>;
     fn span_enter(&mut self, ty: TokenType);
     fn span_end(&mut self, ty: TokenType);
 }
 
+pub struct NoColorsSink<'a, T: fmt::Write> {
+    pub out: &'a mut T,
+}
+
+impl<'a, T: fmt::Write> DisplaySink for NoColorsSink<'a, T> {
+    fn span_enter(&mut self, _ty: TokenType) { }
+    fn span_end(&mut self, _ty: TokenType) { }
+}
+
+impl<'a, T: fmt::Write> fmt::Write for NoColorsSink<'a, T> {
+    fn write_str(&mut self, s: &str) -> Result<(), core::fmt::Error> {
+        self.out.write_str(s)
+    }
+    fn write_char(&mut self, c: char) -> Result<(), core::fmt::Error> {
+        self.out.write_char(c)
+    }
+    fn write_fmt(&mut self, f: fmt::Arguments) -> Result<(), core::fmt::Error> {
+        self.out.write_fmt(f)
+    }
+}
+
+/*
 impl<T: fmt::Write> DisplaySink for T {
+
     /*
     fn write_str(&mut self) -> Result<(), core::fmt::Error> {
         <Self as fmt::Write>::write_str(self, s)
@@ -388,6 +418,227 @@ impl<T: fmt::Write> DisplaySink for T {
     */
     fn span_enter(&mut self, _ty: TokenType) { }
     fn span_end(&mut self, _ty: TokenType) { }
+}
+*/
+
+pub struct BigEnoughString {
+    content: alloc::string::String,
+}
+
+// TODO: move this to an impl on a handle from BigEnoughString obtained through an `unsafe fn` that
+// clearly states requirements
+impl fmt::Write for BigEnoughString {
+    fn write_str(&mut self, s: &str) -> Result<(), core::fmt::Error> {
+        // SAFETY: todo
+        let buf = unsafe { self.content.as_mut_vec() };
+        let new_bytes = s.as_bytes();
+
+        // should get DCE
+        if new_bytes.len() >= 32 {
+            unsafe { core::hint::unreachable_unchecked() }
+        }
+        // should get DCE
+        if new_bytes.len() == 0 {
+            unsafe { core::hint::unreachable_unchecked() }
+        }
+
+        unsafe {
+        let dest = buf.as_mut_ptr().offset(buf.len() as isize);
+        let src = new_bytes.as_ptr();
+
+        let mut rem = new_bytes.len() as isize;
+        unsafe {
+            buf.set_len(buf.len() + new_bytes.len());
+        }
+        /*
+        while rem % 4 > 0 {
+            dest.offset(rem - 1).write_unaligned(src.offset(rem - 1).read_unaligned());
+            rem -= 1;
+        }
+
+        while rem > 0 {
+            (dest.offset(rem - 4) as *mut u32).write_unaligned(unsafe {
+                *core::mem::transmute::<&u8, &u32>(&new_bytes[rem as usize - 4])
+            });
+            rem -= 4;
+        }
+        */
+        unsafe {
+            /*
+            if rem >= 8 {
+                rem -= 8;
+                (dest.offset(rem) as *mut u64).write_unaligned((src.offset(rem) as *const u64).read_unaligned())
+            }
+            if rem >= 4 {
+                rem -= 4;
+                (dest.offset(rem) as *mut u32).write_unaligned((src.offset(rem) as *const u32).read_unaligned());
+                if rem == 0 {
+                    return;
+                }
+            }
+            if rem >= 2 {
+                rem -= 2;
+                (dest.offset(rem) as *mut u16).write_unaligned((src.offset(rem) as *const u16).read_unaligned());
+                if rem == 0 {
+                    return;
+                }
+            }
+            if rem >= 1 {
+                rem -= 1;
+                (dest.offset(rem) as *mut u8).write_unaligned((src.offset(rem) as *const u8).read_unaligned())
+            }
+            */
+            core::arch::asm!(
+                "6:",
+                "cmp {rem:e}, 16",
+                "jb 7f",
+                "mov {buf:r}, qword ptr [{src} + {rem} - 16]",
+                "mov qword ptr [{dest} + {rem} - 16], {buf:r}",
+                "mov {buf:r}, qword ptr [{src} + {rem} - 8]",
+                "mov qword ptr [{dest} + {rem} - 8], {buf:r}",
+                "sub {rem:e}, 16",
+                "jz 11f",
+                "7:",
+                "cmp {rem:e}, 8",
+                "jb 8f",
+                "mov {buf:r}, qword ptr [{src} + {rem} - 8]",
+                "mov qword ptr [{dest} + {rem} - 8], {buf:r}",
+                "sub {rem:e}, 8",
+                "jz 11f",
+                "8:",
+                "cmp {rem:e}, 4",
+                "jb 9f",
+                "mov {buf:e}, dword ptr [{src} + {rem} - 4]",
+                "mov dword ptr [{dest} + {rem} - 4], {buf:e}",
+                "sub {rem:e}, 4",
+                "jz 11f",
+                "9:",
+                "cmp {rem:e}, 2",
+                "jb 10f",
+                "mov {buf:x}, word ptr [{src} + {rem} - 2]",
+                "mov word ptr [{dest} + {rem} - 2], {buf:x}",
+                "sub {rem:e}, 2",
+                "jz 11f",
+                "10:",
+                "cmp {rem:e}, 1",
+                "jb 11f",
+                "mov {buf:l}, byte ptr [{src} + {rem} - 1]",
+                "mov byte ptr [{dest} + {rem} - 1], {buf:l}",
+                "11:",
+                src = in(reg) src,
+                dest = in(reg) dest,
+                rem = inout(reg) rem => _,
+//                    tmp = out(reg) _,
+                buf = out(reg) _,
+                options(nostack),
+            );
+        }
+        /*
+        unsafe {
+            core::arch::asm!(
+                "7:",
+                "cmp {rem:e}, 4",
+                "jb 8f",
+                "sub {rem:e}, 4",
+                "mov {buf:e}, dword ptr [{src} + {rem}]",
+                "mov dword ptr [{dest} + {rem}], {buf:e}",
+                "jmp 7b",
+                "8:",
+                "test {rem:e}, {rem:e}",
+                "jz 10f",
+                "sub {rem:e}, 1",
+                "mov {buf:l}, byte ptr [{src} + {rem}]",
+                "mov byte ptr [{dest} + {rem}], {buf:l}",
+                "jnz 8b",
+                "10:",
+                src = in(reg) src,
+                dest = in(reg) dest,
+                rem = in(reg) rem,
+//                    tmp = out(reg) _,
+                buf = out(reg) _,
+                options(nostack),
+            );
+        }
+        */
+        /*
+        unsafe {
+            core::arch::asm!(
+                "mov {tmp}, {rem}",
+                "and {tmp}, 3",
+                "je 3f",
+                "sub {rem}, {tmp}",
+                "2:",
+                "mov {buf:l}, byte ptr [{src}]",
+                "mov byte ptr [{dest}], {buf:l}",
+                "add {src}, 1",
+                "add {dest}, 1",
+                "sub {tmp}, 1",
+                "jnz 2b",
+                "3:",
+                "test {rem}, {rem}",
+                "jz 5f",
+                "4:",
+                "sub {rem}, 4",
+                "mov {buf:e}, dword ptr [{src} + {rem}]",
+                "mov dword ptr [{dest} + {rem}], {buf:e}",
+                "jnz 4b",
+                "5:",
+                src = in(reg) src,
+                dest = in(reg) dest,
+                rem = in(reg) rem,
+                tmp = out(reg) _,
+                buf = out(reg) _,
+            );
+        }
+        */
+        /*
+        for i in 0..new_bytes.len() {
+            unsafe {
+                buf.as_mut_ptr().offset(buf.len() as isize).offset(i as isize).write_volatile(new_bytes[i]);
+            }
+        }
+        */
+        }
+
+        Ok(())
+    }
+    fn write_char(&mut self, c: char) -> Result<(), core::fmt::Error> {
+        // SAFETY: TODO: goodness, what
+        unsafe {
+            let underlying = self.content.as_mut_vec();
+            underlying.as_mut_ptr().offset(underlying.len() as isize).write(c as u8);
+            underlying.set_len(underlying.len() + 1);
+        }
+        Ok(())
+    }
+}
+
+impl DisplaySink for BigEnoughString {
+    fn span_enter(&mut self, ty: TokenType) {}
+    fn span_end(&mut self, ty: TokenType) {}
+}
+
+impl BigEnoughString {
+    pub fn into_inner(self) -> alloc::string::String {
+        self.content
+    }
+
+    pub fn from_string(mut s: alloc::string::String) -> Self {
+        s.reserve(256);
+        // safety: the string is large enough
+        unsafe { Self::from_string_unchecked(s) }
+    }
+
+    pub fn new() -> Self {
+        Self::from_string(alloc::string::String::new())
+    }
+
+    /// safety: CALLER MUST ENSURE S IS LARGE ENOUGH TO HOLD ANY DISASSEMBLED x86 INSTRUCTION
+    unsafe fn from_string_unchecked(s: alloc::string::String) -> Self {
+        Self {
+            content: s
+        }
+    }
 }
 
 struct ColorizingOperandVisitor<'a, T, Y> {
@@ -460,26 +711,26 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         self.f.write_str(regspec_label(&spec))?;
         self.f.span_end(TokenType::Register);
         if mask.num != 0 {
-            self.f.write_str("{")?;
+            self.f.write_fixed_size("{")?;
             self.f.span_enter(TokenType::Register);
             self.f.write_str(regspec_label(&mask))?;
             self.f.span_end(TokenType::Register);
-            self.f.write_str("}")?;
+            self.f.write_fixed_size("}")?;
         }
         if let MergeMode::Zero = merge_mode {
-            self.f.write_str("{z}")?;
+            self.f.write_fixed_size("{z}")?;
         }
         Ok(())
     }
     fn visit_reg_mask_merge_sae(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode, sae_mode: crate::long_mode::SaeMode) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(regspec_label(&spec))?;
         if mask.num != 0 {
-            self.f.write_str("{")?;
+            self.f.write_fixed_size("{")?;
             self.f.write_str(regspec_label(&mask))?;
-            self.f.write_str("}")?;
+            self.f.write_fixed_size("}")?;
         }
         if let MergeMode::Zero = merge_mode {
-            self.f.write_str("{z}")?;
+            self.f.write_fixed_size("{z}")?;
         }
         self.f.write_str(sae_mode.label())?;
         Ok(())
@@ -487,19 +738,19 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
     fn visit_reg_mask_merge_sae_noround(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(regspec_label(&spec))?;
         if mask.num != 0 {
-            self.f.write_str("{")?;
+            self.f.write_fixed_size("{")?;
             self.f.write_str(regspec_label(&mask))?;
-            self.f.write_str("}")?;
+            self.f.write_fixed_size("}")?;
         }
         if let MergeMode::Zero = merge_mode {
-            self.f.write_str("{z}")?;
+            self.f.write_fixed_size("{z}")?;
         }
-        self.f.write_str("{sae}")?;
+        self.f.write_fixed_size("{sae}")?;
         Ok(())
     }
     fn visit_abs_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
-        self.f.write_str(" ")?;
+        self.f.write_fixed_size(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
             self.f.write_char(name[0] as char)?;
@@ -510,7 +761,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
     }
     fn visit_abs_u64(&mut self, imm: u64) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
-        self.f.write_str(" ")?;
+        self.f.write_fixed_size(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
             self.f.write_char(name[0] as char)?;
@@ -521,35 +772,35 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
     }
     fn visit_disp(&mut self, reg: RegSpec, disp: i32) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
-        self.f.write_str(" ")?;
+        self.f.write_fixed_size(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
             self.f.write_char(name[0] as char)?;
             self.f.write_char(name[1] as char)?;
             self.f.write_char(':')?;
         }
-        self.f.write_str("[")?;
+        self.f.write_fixed_size("[")?;
         self.f.write_str(regspec_label(&reg))?;
-        self.f.write_str(" ")?;
+        self.f.write_fixed_size(" ")?;
         format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-        self.f.write_str("]")
+        self.f.write_fixed_size("]")
     }
     fn visit_deref(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
-        self.f.write_str(" ")?;
+        self.f.write_fixed_size(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
             self.f.write_char(name[0] as char)?;
             self.f.write_char(name[1] as char)?;
             self.f.write_char(':')?;
         }
-        self.f.write_str("[")?;
+        self.f.write_fixed_size("[")?;
         self.f.write_str(regspec_label(&reg))?;
-        self.f.write_str("]")
+        self.f.write_fixed_size("]")
     }
     fn visit_reg_scale(&mut self, reg: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
-        self.f.write_str(" ")?;
+        self.f.write_fixed_size(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
             self.f.write_char(name[0] as char)?;
@@ -563,7 +814,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
     }
     fn visit_reg_scale_disp(&mut self, reg: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
-        self.f.write_str(" ")?;
+        self.f.write_fixed_size(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
             self.f.write_char(name[0] as char)?;
@@ -579,7 +830,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
     }
     fn visit_index_base_scale(&mut self, base: RegSpec, index: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
-        self.f.write_str(" ")?;
+        self.f.write_fixed_size(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
             self.f.write_char(name[0] as char)?;
@@ -594,7 +845,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
     }
     fn visit_index_base_scale_disp(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
-        self.f.write_str(" ")?;
+        self.f.write_fixed_size(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
             self.f.write_char(name[0] as char)?;
@@ -611,7 +862,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
     }
     fn visit_reg_disp_masked(&mut self, spec: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
-        self.f.write_str(" ")?;
+        self.f.write_fixed_size(" ")?;
         write!(self.f, "[{} ", regspec_label(&spec))?;
         format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
         write!(self.f, "]")?;
@@ -619,15 +870,15 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
     }
     fn visit_reg_deref_masked(&mut self, spec: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
-        self.f.write_str(" ")?;
-        self.f.write_str("[")?;
+        self.f.write_fixed_size(" ")?;
+        self.f.write_fixed_size("[")?;
         self.f.write_str(regspec_label(&spec))?;
-        self.f.write_str("]")?;
+        self.f.write_fixed_size("]")?;
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
     fn visit_reg_scale_masked(&mut self, spec: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
-        self.f.write_str(" ")?;
+        self.f.write_fixed_size(" ")?;
         write!(self.f, "[{} * {}]",
             regspec_label(&spec),
             self.colors.number(scale)
@@ -636,7 +887,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
     }
     fn visit_reg_scale_disp_masked(&mut self, spec: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
-        self.f.write_str(" ")?;
+        self.f.write_fixed_size(" ")?;
         write!(self.f, "[{} * {} ",
             regspec_label(&spec),
             self.colors.number(scale),
@@ -647,17 +898,17 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
     }
     fn visit_index_base_masked(&mut self, base: RegSpec, index: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
-        self.f.write_str(" ")?;
-        self.f.write_str("[")?;
+        self.f.write_fixed_size(" ")?;
+        self.f.write_fixed_size("[")?;
         self.f.write_str(regspec_label(&base))?;
-        self.f.write_str(" + ")?;
+        self.f.write_fixed_size(" + ")?;
         self.f.write_str(regspec_label(&index))?;
-        self.f.write_str("]")?;
+        self.f.write_fixed_size("]")?;
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
     fn visit_index_base_disp_masked(&mut self, base: RegSpec, index: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
-        self.f.write_str(" ")?;
+        self.f.write_fixed_size(" ")?;
         write!(self.f, "[{} + {} ",
             regspec_label(&base),
             regspec_label(&index),
@@ -668,7 +919,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
     }
     fn visit_index_base_scale_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
-        self.f.write_str(" ")?;
+        self.f.write_fixed_size(" ")?;
         write!(self.f, "[{} + {} * {}]",
             regspec_label(&base),
             regspec_label(&index),
@@ -678,7 +929,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
     }
     fn visit_index_base_scale_disp_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_str(MEM_SIZE_STRINGS[self.instr.mem_size as usize])?;
-        self.f.write_str(" ")?;
+        self.f.write_fixed_size(" ")?;
         write!(self.f, "[{} + {} * {} ",
             regspec_label(&base),
             regspec_label(&index),
@@ -3688,52 +3939,6 @@ struct NoContext;
 
 extern crate alloc;
 
-trait Writable<T> {
-    unsafe fn as_mut_vec(&mut self) -> &mut alloc::vec::Vec<u8>;
-    fn into_inner(self) -> T;
-}
-
-impl Writable<alloc::string::String> for alloc::string::String {
-    unsafe fn as_mut_vec(&mut self) -> &mut alloc::vec::Vec<u8> {
-        self.as_mut_vec()
-    }
-    fn into_inner(self) -> alloc::string::String {
-        self
-    }
-}
-
-struct BigEnoughString {
-    content: alloc::string::String,
-}
-
-impl Writable<alloc::string::String> for BigEnoughString {
-    unsafe fn as_mut_vec(&mut self) -> &mut alloc::vec::Vec<u8> {
-        self.content.as_mut_vec()
-    }
-    fn into_inner(self) -> alloc::string::String {
-        self.content
-    }
-}
-
-impl BigEnoughString {
-    pub fn from_string(mut s: alloc::string::String) -> Self {
-        s.reserve(256);
-        // safety: the string is large enough
-        unsafe { Self::from_string_unchecked(s) }
-    }
-
-    pub fn new() -> Self {
-        Self::from_string(alloc::string::String::new())
-    }
-
-    /// safety: CALLER MUST ENSURE S IS LARGE ENOUGH TO HOLD ANY DISASSEMBLED x86 INSTRUCTION
-    unsafe fn from_string_unchecked(s: alloc::string::String) -> Self {
-        Self {
-            content: s
-        }
-    }
-}
-
 // TODO: find a better place to put this....
 fn c_to_hex(c: u8) -> u8 {
     /*
@@ -4187,6 +4392,7 @@ impl Instruction {
             }
         }
 
+        /*
         let address: u64 = 0;
         let context = Some(&NoContext);
         let colors = &NoColors;
@@ -4839,31 +5045,38 @@ impl Instruction {
                 }
             }
         }
+            */
         Ok(())
     }
 
-    pub fn write_to<T: fmt::Write>(&self, out: &mut T) -> fmt::Result {
+    pub fn write_to<T: DisplaySink>(&self, out: &mut T) -> fmt::Result {
         self.display_with(DisplayStyle::Intel).contextualize(&NoColors, 0, Some(&NoContext), out)
     }
 }
 
 fn contextualize_intel<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors: &Y, _address: u64, _context: Option<&NoContext>, out: &mut T) -> fmt::Result {
+    let mut out = NoColorsSink {
+        out,
+    };
+    let mut out = &mut out;
+    use core::fmt::Write;
+
     if instr.xacquire() {
-        out.write_str("xacquire ")?;
+        out.write_fixed_size("xacquire ")?;
     }
     if instr.xrelease() {
-        out.write_str("xrelease ")?;
+        out.write_fixed_size("xrelease ")?;
     }
     if instr.prefixes.lock() {
-        out.write_str("lock ")?;
+        out.write_fixed_size("lock ")?;
     }
 
     if instr.prefixes.rep_any() {
         if instr.opcode.can_rep() {
             if instr.prefixes.rep() {
-                out.write_str("rep ")?;
+                out.write_fixed_size("rep ")?;
             } else if instr.prefixes.repnz() {
-                out.write_str("repnz ")?;
+                out.write_fixed_size("repnz ")?;
             }
         }
     }
@@ -4871,7 +5084,7 @@ fn contextualize_intel<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors:
     out.write_str(instr.opcode.name())?;
 
     if instr.operand_count > 0 {
-        out.write_str(" ")?;
+        out.write_fixed_size(" ")?;
 
         if instr.visit_operand(0, &mut RelativeBranchPrinter {
             inst: instr,
@@ -4892,7 +5105,7 @@ fn contextualize_intel<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors:
         for i in 1..instr.operand_count {
             // don't worry about checking for `instr.operands[i] != Nothing`, it would be a bug to
             // reach that while iterating only to `operand_count`..
-            out.write_str(", ")?;
+            out.write_fixed_size(", ")?;
             let mut displayer = ColorizingOperandVisitor {
                 instr,
                 op_nr: i,
@@ -5309,6 +5522,12 @@ impl <'instr, T: fmt::Write, Y: YaxColors> ShowContextual<u64, NoContext, T, Y> 
 #[cfg(feature="std")]
 impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::String>], T, Y> for Instruction {
     fn contextualize(&self, colors: &Y, _address: u64, context: Option<&[Option<alloc::string::String>]>, out: &mut T) -> fmt::Result {
+        let mut out = NoColorsSink {
+            out,
+        };
+        let mut out = &mut out;
+        use core::fmt::Write;
+
         if self.prefixes.lock() {
             write!(out, "lock ")?;
         }
@@ -5390,13 +5609,13 @@ static RELATIVE_BRANCHES: [Opcode; 21] = [
     Opcode::JLE, Opcode::JG,
 ];
 
-struct RelativeBranchPrinter<'a, Y: YaxColors, F: fmt::Write> {
+struct RelativeBranchPrinter<'a, Y: YaxColors, F: DisplaySink> {
     inst: &'a Instruction,
     colors: &'a Y,
     out: &'a mut F,
 }
 
-impl<'a, Y: YaxColors, F: fmt::Write> crate::long_mode::OperandVisitor for RelativeBranchPrinter<'a, Y, F> {
+impl<'a, Y: YaxColors, F: DisplaySink> crate::long_mode::OperandVisitor for RelativeBranchPrinter<'a, Y, F> {
     // return true if we printed a relative branch offset, false otherwise
     type Ok = bool;
     // but errors are errors
@@ -5425,7 +5644,7 @@ impl<'a, Y: YaxColors, F: fmt::Write> crate::long_mode::OperandVisitor for Relat
                 self.out.write_char('+')?;
                 // danger_anguished_string_write(&mut self.out, "+");
             }
-            self.out.write_str("0x")?;
+            self.out.write_fixed_size("0x")?;
             // danger_anguished_string_write(self.out, "0x");
             let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 2];
             let mut curr = buf.len();
@@ -5465,7 +5684,7 @@ impl<'a, Y: YaxColors, F: fmt::Write> crate::long_mode::OperandVisitor for Relat
                 self.out.write_char('+')?;
                 // danger_anguished_string_write(&mut self.out, "+");
             }
-            self.out.write_str("0x")?;
+            self.out.write_fixed_size("0x")?;
             // danger_anguished_string_write(self.out, "0x");
             let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 8];
             let mut curr = buf.len();
