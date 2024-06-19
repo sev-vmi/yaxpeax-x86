@@ -1469,6 +1469,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         self.f.write_fixed_size("]")?;
         Ok(())
     }
+    #[inline(always)]
     fn visit_disp(&mut self, reg: RegSpec, disp: i32) -> Result<Self::Ok, Self::Error> {
         unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         if self.op_nr >= 4 {
