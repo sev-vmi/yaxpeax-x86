@@ -1386,7 +1386,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
         if mask.num != 0 {
             self.f.write_fixed_size("{")?;
-            self.f.write_str(regspec_label(&mask))?;
+            unsafe { self.f.write_lt_8(regspec_label(&mask))?; }
             self.f.write_fixed_size("}")?;
         }
         if let MergeMode::Zero = merge_mode {
@@ -1563,7 +1563,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
             self.f.write_fixed_size("+ 0x")?;
         }
         self.f.write_u32(v)?;
-        write!(self.f, "]")?;
+        self.f.write_char(']')?;
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
     fn visit_reg_deref_masked(&mut self, spec: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
@@ -1585,11 +1585,11 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
     }
     fn visit_reg_scale_disp_masked(&mut self, spec: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
+        self.f.write_fixed_size(" [")?;
+        unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
+        self.f.write_fixed_size(" * ")?;
+        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
         self.f.write_fixed_size(" ")?;
-        write!(self.f, "[{} * {} ",
-            regspec_label(&spec),
-            scale,
-        )?;
         let mut v = disp as u32;
         if disp < 0 {
             self.f.write_fixed_size("- 0x")?;
@@ -1598,7 +1598,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
             self.f.write_fixed_size("+ 0x")?;
         }
         self.f.write_u32(v)?;
-        write!(self.f, "]")?;
+        self.f.write_char(']')?;
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
     fn visit_index_base_masked(&mut self, base: RegSpec, index: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
@@ -1613,11 +1613,11 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
     }
     fn visit_index_base_disp_masked(&mut self, base: RegSpec, index: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
+        self.f.write_fixed_size(" [")?;
+        unsafe { self.f.write_lt_8(regspec_label(&base))?; }
+        self.f.write_fixed_size(" + ")?;
+        unsafe { self.f.write_lt_8(regspec_label(&index))?; }
         self.f.write_fixed_size(" ")?;
-        write!(self.f, "[{} + {} ",
-            regspec_label(&base),
-            regspec_label(&index),
-        )?;
         let mut v = disp as u32;
         if disp < 0 {
             self.f.write_fixed_size("- 0x")?;
@@ -1626,17 +1626,18 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
             self.f.write_fixed_size("+ 0x")?;
         }
         self.f.write_u32(v)?;
-        write!(self.f, "]")?;
+        self.f.write_char(']')?;
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
     fn visit_index_base_scale_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
-        self.f.write_fixed_size(" ")?;
-        write!(self.f, "[{} + {} * {}]",
-            regspec_label(&base),
-            regspec_label(&index),
-            scale
-        )?;
+        self.f.write_fixed_size(" [")?;
+        unsafe { self.f.write_lt_8(regspec_label(&base))?; }
+        self.f.write_fixed_size(" + ")?;
+        unsafe { self.f.write_lt_8(regspec_label(&index))?; }
+        self.f.write_fixed_size(" * ")?;
+        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_fixed_size("]")?;
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
     fn visit_index_base_scale_disp_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
@@ -1655,7 +1656,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
             self.f.write_fixed_size("+ 0x")?;
         }
         self.f.write_u32(v)?;
-        write!(self.f, "]")?;
+        self.f.write_char(']')?;
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
 
