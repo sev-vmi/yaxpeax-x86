@@ -1292,7 +1292,6 @@ impl BigEnoughString {
 }
 
 struct ColorizingOperandVisitor<'a, T> {
-    instr: &'a Instruction,
     f: &'a mut T,
 }
 
@@ -1541,20 +1540,30 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         }
         self.f.write_u32(v)?;
         self.f.write_char(']')?;
-        write!(self.f, "{{{}}}", regspec_label(&mask_reg))
+        self.f.write_char('{')?;
+        unsafe { self.f.write_lt_8(regspec_label(&mask_reg))?; }
+        self.f.write_char('}')?;
+        Ok(())
     }
     fn visit_reg_deref_masked(&mut self, spec: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
         unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
         self.f.write_fixed_size("]")?;
-        write!(self.f, "{{{}}}", regspec_label(&mask_reg))
+        self.f.write_char('{')?;
+        unsafe { self.f.write_lt_8(regspec_label(&mask_reg))?; }
+        self.f.write_char('}')?;
+        Ok(())
     }
     fn visit_reg_scale_masked(&mut self, spec: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
-        write!(self.f, "[{} * {}]",
-            regspec_label(&spec),
-            scale
-        )?;
-        write!(self.f, "{{{}}}", regspec_label(&mask_reg))
+        self.f.write_fixed_size("[")?;
+        unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
+        self.f.write_fixed_size(" * ")?;
+        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_fixed_size("]")?;
+        self.f.write_char('{')?;
+        unsafe { self.f.write_lt_8(regspec_label(&mask_reg))?; }
+        self.f.write_char('}')?;
+        Ok(())
     }
     fn visit_reg_scale_disp_masked(&mut self, spec: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
@@ -1571,7 +1580,10 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         }
         self.f.write_u32(v)?;
         self.f.write_char(']')?;
-        write!(self.f, "{{{}}}", regspec_label(&mask_reg))
+        self.f.write_char('{')?;
+        unsafe { self.f.write_lt_8(regspec_label(&mask_reg))?; }
+        self.f.write_char('}')?;
+        Ok(())
     }
     fn visit_index_base_masked(&mut self, base: RegSpec, index: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
@@ -1579,7 +1591,10 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         self.f.write_fixed_size(" + ")?;
         unsafe { self.f.write_lt_8(regspec_label(&index))?; }
         self.f.write_fixed_size("]")?;
-        write!(self.f, "{{{}}}", regspec_label(&mask_reg))
+        self.f.write_char('{')?;
+        unsafe { self.f.write_lt_8(regspec_label(&mask_reg))?; }
+        self.f.write_char('}')?;
+        Ok(())
     }
     fn visit_index_base_disp_masked(&mut self, base: RegSpec, index: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
@@ -1596,7 +1611,10 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         }
         self.f.write_u32(v)?;
         self.f.write_char(']')?;
-        write!(self.f, "{{{}}}", regspec_label(&mask_reg))
+        self.f.write_char('{')?;
+        unsafe { self.f.write_lt_8(regspec_label(&mask_reg))?; }
+        self.f.write_char('}')?;
+        Ok(())
     }
     fn visit_index_base_scale_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
@@ -1606,14 +1624,19 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         self.f.write_fixed_size(" * ")?;
         self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
         self.f.write_fixed_size("]")?;
-        write!(self.f, "{{{}}}", regspec_label(&mask_reg))
+        self.f.write_char('{')?;
+        unsafe { self.f.write_lt_8(regspec_label(&mask_reg))?; }
+        self.f.write_char('}')?;
+        Ok(())
     }
     fn visit_index_base_scale_disp_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
-        write!(self.f, "[{} + {} * {} ",
-            regspec_label(&base),
-            regspec_label(&index),
-            scale,
-        )?;
+        self.f.write_fixed_size("[")?;
+        unsafe { self.f.write_lt_8(regspec_label(&base))?; }
+        self.f.write_fixed_size(" + ")?;
+        unsafe { self.f.write_lt_8(regspec_label(&index))?; }
+        self.f.write_fixed_size(" * ")?;
+        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_char(' ')?;
         let mut v = disp as u32;
         if disp < 0 {
             self.f.write_fixed_size("- 0x")?;
@@ -1623,7 +1646,10 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         }
         self.f.write_u32(v)?;
         self.f.write_char(']')?;
-        write!(self.f, "{{{}}}", regspec_label(&mask_reg))
+        self.f.write_char('{')?;
+        unsafe { self.f.write_lt_8(regspec_label(&mask_reg))?; }
+        self.f.write_char('}')?;
+        Ok(())
     }
 
     fn visit_other(&mut self) -> Result<Self::Ok, Self::Error> {
@@ -4696,7 +4722,6 @@ fn contextualize_intel<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fmt:
         }
 
         let mut displayer = ColorizingOperandVisitor {
-            instr,
             f: out,
         };
         instr.visit_operand(0 as u8, &mut displayer)?;
@@ -4726,7 +4751,6 @@ fn contextualize_intel<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fmt:
             }
 
             let mut displayer = ColorizingOperandVisitor {
-                instr,
                 f: out,
             };
 
@@ -5191,7 +5215,6 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::St
                 }
 
                 let mut displayer = ColorizingOperandVisitor {
-                    instr: self,
                     f: out,
                 };
                 self.visit_operand(0, &mut displayer)?;
@@ -5209,7 +5232,6 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::St
                         _ => {
                             write!(out, ", ")?;
                             let mut displayer = ColorizingOperandVisitor {
-                                instr: self,
                                 f: out,
                             };
                             self.visit_operand(i as u8, &mut displayer)?;
