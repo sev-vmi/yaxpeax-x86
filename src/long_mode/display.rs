@@ -1208,24 +1208,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
     fn visit_u8(&mut self, imm: u8) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
         self.f.write_fixed_size("0x")?;
-        let mut buf = [MaybeUninit::<u8>::uninit(); 2];
-        let mut curr = buf.len();
-        let mut v = imm;
-        loop {
-            let digit = v % 16;
-            let c = c_to_hex(digit as u8);
-            curr -= 1;
-            buf[curr].write(c);
-            v = v / 16;
-            if v == 0 {
-                break;
-            }
-        }
-        let buf = &buf[curr..];
-        let s: &str = unsafe {
-            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
-        };
-        self.f.write_fixed_size(s)?;
+        self.f.write_u8(imm)?;
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
@@ -1237,25 +1220,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
             v = -imm as u8;
         }
         self.f.write_fixed_size("0x")?;
-        let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 2];
-        let mut curr = buf.len();
-        loop {
-            let digit = v % 16;
-            let c = c_to_hex(digit as u8);
-            curr -= 1;
-            buf[curr].write(c);
-            v = v / 16;
-            if v == 0 {
-                break;
-            }
-        }
-        let buf = &buf[curr..];
-        let s = unsafe {
-            core::mem::transmute::<&[core::mem::MaybeUninit<u8>], &str>(buf)
-        };
-
-        // not actually fixed size, but this should optimize right i hope..
-        self.f.write_fixed_size(s)?;
+        self.f.write_u8(v)?;
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
