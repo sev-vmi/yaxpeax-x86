@@ -740,18 +740,63 @@ impl DisplaySink for alloc::string::String {
     /// this is provided for optimization opportunities when the formatted integer can be written
     /// directly to the sink (rather than formatted to an intermediate buffer and output as a
     /// followup step)
-    fn write_u8(&mut self, v: u8) -> Result<(), core::fmt::Error> {
-        use core::fmt::Write;
-        write!(self, "{:x}", v)
+    fn write_u8(&mut self, mut v: u8) -> Result<(), core::fmt::Error> {
+        // we can fairly easily predict the size of a formatted string here with lzcnt, which also
+        // means we can write directly into the correct offsets of the output string.
+        let printed_size = (((8 - v.leading_zeros()) >> 2) + 1) as usize;
+        self.reserve(printed_size);
+
+        unsafe {
+            let buf = unsafe { self.as_mut_vec() };
+            let p = buf.as_mut_ptr();
+            let mut curr = printed_size;
+            loop {
+                let digit = v % 16;
+                let c = c_to_hex(digit as u8);
+                curr -= 1;
+                p.offset(curr as isize).write(c);
+                v = v / 16;
+                if v == 0 {
+                    break;
+                }
+            }
+
+            buf.set_len(buf.len() + printed_size);
+        }
+
+        Ok(())
     }
     /// write a u16 to the output as a base-16 integer.
     ///
     /// this is provided for optimization opportunities when the formatted integer can be written
     /// directly to the sink (rather than formatted to an intermediate buffer and output as a
     /// followup step)
-    fn write_u16(&mut self, v: u16) -> Result<(), core::fmt::Error> {
-        use core::fmt::Write;
-        write!(self, "{:x}", v)
+    fn write_u16(&mut self, mut v: u16) -> Result<(), core::fmt::Error> {
+        // we can fairly easily predict the size of a formatted string here with lzcnt, which also
+        // means we can write directly into the correct offsets of the output string.
+        let printed_size = (((16 - v.leading_zeros()) >> 2) + 1) as usize;
+        self.reserve(printed_size);
+
+        unsafe {
+            let buf = unsafe { self.as_mut_vec() };
+            let p = buf.as_mut_ptr();
+            let mut curr = printed_size;
+            loop {
+                let digit = v % 16;
+                let c = c_to_hex(digit as u8);
+                curr -= 1;
+                p.offset(curr as isize).write(c);
+                v = v / 16;
+                if v == 0 {
+                    break;
+                }
+            }
+
+            buf.set_len(buf.len() + printed_size);
+        }
+
+        Ok(())
+
     }
     /// write a u32 to the output as a base-16 integer.
     ///
@@ -1028,18 +1073,60 @@ impl DisplaySink for BigEnoughString {
     /// this is provided for optimization opportunities when the formatted integer can be written
     /// directly to the sink (rather than formatted to an intermediate buffer and output as a
     /// followup step)
-    fn write_u8(&mut self, v: u8) -> Result<(), core::fmt::Error> {
-        use core::fmt::Write;
-        write!(self, "{:x}", v)
+    fn write_u8(&mut self, mut v: u8) -> Result<(), core::fmt::Error> {
+        // we can fairly easily predict the size of a formatted string here with lzcnt, which also
+        // means we can write directly into the correct offsets of the output string.
+        let printed_size = (((8 - v.leading_zeros()) >> 2) + 1) as usize;
+
+        unsafe {
+            let buf = unsafe { self.content.as_mut_vec() };
+            let p = buf.as_mut_ptr();
+            let mut curr = printed_size;
+            loop {
+                let digit = v % 16;
+                let c = c_to_hex(digit as u8);
+                curr -= 1;
+                p.offset(curr as isize).write(c);
+                v = v / 16;
+                if v == 0 {
+                    break;
+                }
+            }
+
+            buf.set_len(buf.len() + printed_size);
+        }
+
+        Ok(())
     }
     /// write a u16 to the output as a base-16 integer.
     ///
     /// this is provided for optimization opportunities when the formatted integer can be written
     /// directly to the sink (rather than formatted to an intermediate buffer and output as a
     /// followup step)
-    fn write_u16(&mut self, v: u16) -> Result<(), core::fmt::Error> {
-        use core::fmt::Write;
-        write!(self, "{:x}", v)
+    fn write_u16(&mut self, mut v: u16) -> Result<(), core::fmt::Error> {
+        // we can fairly easily predict the size of a formatted string here with lzcnt, which also
+        // means we can write directly into the correct offsets of the output string.
+        let printed_size = (((16 - v.leading_zeros()) >> 2) + 1) as usize;
+
+        unsafe {
+            let buf = unsafe { self.content.as_mut_vec() };
+            let p = buf.as_mut_ptr();
+            let mut curr = printed_size;
+            loop {
+                let digit = v % 16;
+                let c = c_to_hex(digit as u8);
+                curr -= 1;
+                p.offset(curr as isize).write(c);
+                v = v / 16;
+                if v == 0 {
+                    break;
+                }
+            }
+
+            buf.set_len(buf.len() + printed_size);
+        }
+
+        Ok(())
     }
     /// write a u32 to the output as a base-16 integer.
     ///
@@ -1172,24 +1259,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
     fn visit_u16(&mut self, imm: u16) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
         self.f.write_fixed_size("0x")?;
-        let mut buf = [MaybeUninit::<u8>::uninit(); 4];
-        let mut curr = buf.len();
-        let mut v = imm;
-        loop {
-            let digit = v % 16;
-            let c = c_to_hex(digit as u8);
-            curr -= 1;
-            buf[curr].write(c);
-            v = v / 16;
-            if v == 0 {
-                break;
-            }
-        }
-        let buf = &buf[curr..];
-        let s: &str = unsafe {
-            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
-        };
-        self.f.write_fixed_size(s)?;
+        self.f.write_u16(imm)?;
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
@@ -1201,49 +1271,14 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
             v = -imm as u16;
         }
         self.f.write_fixed_size("0x")?;
-        let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 4];
-        let mut curr = buf.len();
-        loop {
-            let digit = v % 16;
-            let c = c_to_hex(digit as u8);
-            curr -= 1;
-            buf[curr].write(c);
-            v = v / 16;
-            if v == 0 {
-                break;
-            }
-        }
-        let buf = &buf[curr..];
-        let s = unsafe {
-            core::mem::transmute::<&[core::mem::MaybeUninit<u8>], &str>(buf)
-        };
-
-        // not actually fixed size, but this should optimize right i hope..
-        self.f.write_fixed_size(s)?;
+        self.f.write_u16(v)?;
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
     fn visit_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
         self.f.write_fixed_size("0x")?;
-        let mut buf = [MaybeUninit::<u8>::uninit(); 8];
-        let mut curr = buf.len();
-        let mut v = imm;
-        loop {
-            let digit = v % 16;
-            let c = c_to_hex(digit as u8);
-            curr -= 1;
-            buf[curr].write(c);
-            v = v / 16;
-            if v == 0 {
-                break;
-            }
-        }
-        let buf = &buf[curr..];
-        let s: &str = unsafe {
-            core::mem::transmute::<&[MaybeUninit<u8>], &str>(buf)
-        };
-        self.f.write_fixed_size(s)?;
+        self.f.write_u32(imm)?;
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
@@ -1255,25 +1290,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
             v = -imm as u32;
         }
         self.f.write_fixed_size("0x")?;
-        let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 8];
-        let mut curr = buf.len();
-        loop {
-            let digit = v % 16;
-            let c = c_to_hex(digit as u8);
-            curr -= 1;
-            buf[curr].write(c);
-            v = v / 16;
-            if v == 0 {
-                break;
-            }
-        }
-        let buf = &buf[curr..];
-        let s = unsafe {
-            core::mem::transmute::<&[core::mem::MaybeUninit<u8>], &str>(buf)
-        };
-
-        // not actually fixed size, but this should optimize right i hope..
-        self.f.write_fixed_size(s)?;
+        self.f.write_u32(v)?;
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
