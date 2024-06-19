@@ -371,6 +371,7 @@ pub enum TokenType {
 }
 
 pub trait DisplaySink: fmt::Write {
+    #[inline(always)]
     fn write_fixed_size(&mut self, s: &str) -> Result<(), core::fmt::Error> {
         self.write_str(s)
     }
@@ -493,6 +494,7 @@ impl fmt::Write for BigEnoughString {
 
 // TODO: delete this whole thing? maybe?
 impl DisplaySink for alloc::string::String {
+    #[inline(always)]
     fn write_fixed_size(&mut self, s: &str) -> Result<(), core::fmt::Error> {
         self.reserve(s.len());
         let buf = unsafe { self.as_mut_vec() };
@@ -787,6 +789,7 @@ impl DisplaySink for alloc::string::String {
 }
 
 impl DisplaySink for BigEnoughString {
+    #[inline(always)]
     fn write_fixed_size(&mut self, s: &str) -> Result<(), core::fmt::Error> {
         let buf = unsafe { self.content.as_mut_vec() };
         let new_bytes = s.as_bytes();
