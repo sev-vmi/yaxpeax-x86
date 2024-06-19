@@ -1354,7 +1354,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         Ok(())
     }
     fn visit_reg_mask_merge_sae(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode, sae_mode: crate::long_mode::SaeMode) -> Result<Self::Ok, Self::Error> {
-        self.f.write_str(regspec_label(&spec))?;
+        unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
         if mask.num != 0 {
             self.f.write_fixed_size("{")?;
             unsafe { self.f.write_lt_8(regspec_label(&mask))?; }
@@ -1363,11 +1363,11 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         if let MergeMode::Zero = merge_mode {
             self.f.write_fixed_size("{z}")?;
         }
-        self.f.write_str(sae_mode.label())?;
+        unsafe { self.f.write_lt_16(sae_mode.label())?; }
         Ok(())
     }
     fn visit_reg_mask_merge_sae_noround(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
-        self.f.write_str(regspec_label(&spec))?;
+        unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
         if mask.num != 0 {
             self.f.write_fixed_size("{")?;
             self.f.write_str(regspec_label(&mask))?;
@@ -1536,7 +1536,9 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
     fn visit_reg_disp_masked(&mut self, spec: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
-        write!(self.f, "[{} ", regspec_label(&spec))?;
+        self.f.write_char('[')?;
+        unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
+        self.f.write_char(' ')?;
         format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
         write!(self.f, "]")?;
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
@@ -1545,7 +1547,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         self.f.write_fixed_size("[")?;
-        self.f.write_str(regspec_label(&spec))?;
+        unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
         self.f.write_fixed_size("]")?;
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
@@ -1573,9 +1575,9 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         self.f.write_fixed_size("[")?;
-        self.f.write_str(regspec_label(&base))?;
+        unsafe { self.f.write_lt_8(regspec_label(&base))?; }
         self.f.write_fixed_size(" + ")?;
-        self.f.write_str(regspec_label(&index))?;
+        unsafe { self.f.write_lt_8(regspec_label(&index))?; }
         self.f.write_fixed_size("]")?;
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
