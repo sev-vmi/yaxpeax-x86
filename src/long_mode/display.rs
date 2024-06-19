@@ -517,15 +517,16 @@ impl DisplaySink for alloc::string::String {
 
         unsafe {
             let dest = buf.as_mut_ptr().offset(buf.len() as isize);
-            let src = new_bytes.as_ptr();
 
-            let mut rem = new_bytes.len() as isize;
-
+            // this used to be enough to bamboozle llvm away from
+            // https://github.com/rust-lang/rust/issues/92993#issuecomment-2028915232https://github.com/rust-lang/rust/issues/92993#issuecomment-2028915232
+            // if `s` is not fixed size. somewhere between Rust 1.68 and Rust 1.74 this stopped
+            // being sufficient, so `write_fixed_size` truly should only be used for fixed size `s`
+            // (otherwise this is a libc memcpy call in disguise). for fixed-size strings this
+            // unrolls into some kind of appropriate series of `mov`.
             dest.offset(0 as isize).write(new_bytes[0]);
             for i in 1..new_bytes.len() {
-                unsafe {
-                    dest.offset(i as isize).write(new_bytes[i]);
-                }
+                dest.offset(i as isize).write(new_bytes[i]);
             }
 
             buf.set_len(buf.len() + new_bytes.len());
@@ -553,7 +554,7 @@ impl DisplaySink for alloc::string::String {
             let dest = buf.as_mut_ptr().offset(buf.len() as isize);
             let src = new_bytes.as_ptr();
 
-            let mut rem = new_bytes.len() as isize;
+            let rem = new_bytes.len() as isize;
 
             // set_len early because there is no way to avoid the following asm!() writing that
             // same number of bytes into buf
@@ -633,7 +634,7 @@ impl DisplaySink for alloc::string::String {
             let dest = buf.as_mut_ptr().offset(buf.len() as isize);
             let src = new_bytes.as_ptr();
 
-            let mut rem = new_bytes.len() as isize;
+            let rem = new_bytes.len() as isize;
 
             // set_len early because there is no way to avoid the following asm!() writing that
             // same number of bytes into buf
@@ -704,7 +705,7 @@ impl DisplaySink for alloc::string::String {
             let dest = buf.as_mut_ptr().offset(buf.len() as isize);
             let src = new_bytes.as_ptr();
 
-            let mut rem = new_bytes.len() as isize;
+            let rem = new_bytes.len() as isize;
 
             // set_len early because there is no way to avoid the following asm!() writing that
             // same number of bytes into buf
@@ -760,21 +761,23 @@ impl DisplaySink for alloc::string::String {
         let printed_size = (((8 - v.leading_zeros()) >> 2) + 1) as usize;
         self.reserve(printed_size);
 
-        unsafe {
-            let buf = unsafe { self.as_mut_vec() };
-            let p = buf.as_mut_ptr();
-            let mut curr = printed_size;
-            loop {
-                let digit = v % 16;
-                let c = c_to_hex(digit as u8);
-                curr -= 1;
+        let buf = unsafe { self.as_mut_vec() };
+        let p = buf.as_mut_ptr();
+        let mut curr = printed_size;
+        loop {
+            let digit = v % 16;
+            let c = c_to_hex(digit as u8);
+            curr -= 1;
+            unsafe {
                 p.offset(curr as isize).write(c);
-                v = v / 16;
-                if v == 0 {
-                    break;
-                }
             }
+            v = v / 16;
+            if v == 0 {
+                break;
+            }
+        }
 
+        unsafe {
             buf.set_len(buf.len() + printed_size);
         }
 
@@ -791,21 +794,23 @@ impl DisplaySink for alloc::string::String {
         let printed_size = (((16 - v.leading_zeros()) >> 2) + 1) as usize;
         self.reserve(printed_size);
 
-        unsafe {
-            let buf = unsafe { self.as_mut_vec() };
-            let p = buf.as_mut_ptr();
-            let mut curr = printed_size;
-            loop {
-                let digit = v % 16;
-                let c = c_to_hex(digit as u8);
-                curr -= 1;
+        let buf = unsafe { self.as_mut_vec() };
+        let p = buf.as_mut_ptr();
+        let mut curr = printed_size;
+        loop {
+            let digit = v % 16;
+            let c = c_to_hex(digit as u8);
+            curr -= 1;
+            unsafe {
                 p.offset(curr as isize).write(c);
-                v = v / 16;
-                if v == 0 {
-                    break;
-                }
             }
+            v = v / 16;
+            if v == 0 {
+                break;
+            }
+        }
 
+        unsafe {
             buf.set_len(buf.len() + printed_size);
         }
 
@@ -824,21 +829,23 @@ impl DisplaySink for alloc::string::String {
         let printed_size = (((32 - v.leading_zeros()) >> 2) + 1) as usize;
         self.reserve(printed_size);
 
-        unsafe {
-            let buf = unsafe { self.as_mut_vec() };
-            let p = buf.as_mut_ptr();
-            let mut curr = printed_size;
-            loop {
-                let digit = v % 16;
-                let c = c_to_hex(digit as u8);
-                curr -= 1;
+        let buf = unsafe { self.as_mut_vec() };
+        let p = buf.as_mut_ptr();
+        let mut curr = printed_size;
+        loop {
+            let digit = v % 16;
+            let c = c_to_hex(digit as u8);
+            curr -= 1;
+            unsafe {
                 p.offset(curr as isize).write(c);
-                v = v / 16;
-                if v == 0 {
-                    break;
-                }
             }
+            v = v / 16;
+            if v == 0 {
+                break;
+            }
+        }
 
+        unsafe {
             buf.set_len(buf.len() + printed_size);
         }
 
@@ -856,21 +863,23 @@ impl DisplaySink for alloc::string::String {
         let printed_size = (((64 - v.leading_zeros()) >> 2) + 1) as usize;
         self.reserve(printed_size);
 
-        unsafe {
-            let buf = unsafe { self.as_mut_vec() };
-            let p = buf.as_mut_ptr();
-            let mut curr = printed_size;
-            loop {
-                let digit = v % 16;
-                let c = c_to_hex(digit as u8);
-                curr -= 1;
+        let buf = unsafe { self.as_mut_vec() };
+        let p = buf.as_mut_ptr();
+        let mut curr = printed_size;
+        loop {
+            let digit = v % 16;
+            let c = c_to_hex(digit as u8);
+            curr -= 1;
+            unsafe {
                 p.offset(curr as isize).write(c);
-                v = v / 16;
-                if v == 0 {
-                    break;
-                }
             }
+            v = v / 16;
+            if v == 0 {
+                break;
+            }
+        }
 
+        unsafe {
             buf.set_len(buf.len() + printed_size);
         }
 
@@ -896,15 +905,16 @@ impl DisplaySink for BigEnoughString {
 
         unsafe {
             let dest = buf.as_mut_ptr().offset(buf.len() as isize);
-            let src = new_bytes.as_ptr();
 
-            let mut rem = new_bytes.len() as isize;
-
+            // this used to be enough to bamboozle llvm away from
+            // https://github.com/rust-lang/rust/issues/92993#issuecomment-2028915232https://github.com/rust-lang/rust/issues/92993#issuecomment-2028915232
+            // if `s` is not fixed size. somewhere between Rust 1.68 and Rust 1.74 this stopped
+            // being sufficient, so `write_fixed_size` truly should only be used for fixed size `s`
+            // (otherwise this is a libc memcpy call in disguise). for fixed-size strings this
+            // unrolls into some kind of appropriate series of `mov`.
             dest.offset(0 as isize).write(new_bytes[0]);
             for i in 1..new_bytes.len() {
-                unsafe {
-                    dest.offset(i as isize).write(new_bytes[i]);
-                }
+                dest.offset(i as isize).write(new_bytes[i]);
             }
 
             buf.set_len(buf.len() + new_bytes.len());
@@ -930,7 +940,7 @@ impl DisplaySink for BigEnoughString {
             let dest = buf.as_mut_ptr().offset(buf.len() as isize);
             let src = new_bytes.as_ptr();
 
-            let mut rem = new_bytes.len() as isize;
+            let rem = new_bytes.len() as isize;
 
             // set_len early because there is no way to avoid the following asm!() writing that
             // same number of bytes into buf
@@ -1008,7 +1018,7 @@ impl DisplaySink for BigEnoughString {
             let dest = buf.as_mut_ptr().offset(buf.len() as isize);
             let src = new_bytes.as_ptr();
 
-            let mut rem = new_bytes.len() as isize;
+            let rem = new_bytes.len() as isize;
 
             // set_len early because there is no way to avoid the following asm!() writing that
             // same number of bytes into buf
@@ -1077,7 +1087,7 @@ impl DisplaySink for BigEnoughString {
             let dest = buf.as_mut_ptr().offset(buf.len() as isize);
             let src = new_bytes.as_ptr();
 
-            let mut rem = new_bytes.len() as isize;
+            let rem = new_bytes.len() as isize;
 
             // set_len early because there is no way to avoid the following asm!() writing that
             // same number of bytes into buf
@@ -1132,21 +1142,23 @@ impl DisplaySink for BigEnoughString {
         // means we can write directly into the correct offsets of the output string.
         let printed_size = (((8 - v.leading_zeros()) >> 2) + 1) as usize;
 
-        unsafe {
-            let buf = unsafe { self.content.as_mut_vec() };
-            let p = buf.as_mut_ptr();
-            let mut curr = printed_size;
-            loop {
-                let digit = v % 16;
-                let c = c_to_hex(digit as u8);
-                curr -= 1;
+        let buf = unsafe { self.content.as_mut_vec() };
+        let p = buf.as_mut_ptr();
+        let mut curr = printed_size;
+        loop {
+            let digit = v % 16;
+            let c = c_to_hex(digit as u8);
+            curr -= 1;
+            unsafe {
                 p.offset(curr as isize).write(c);
-                v = v / 16;
-                if v == 0 {
-                    break;
-                }
             }
+            v = v / 16;
+            if v == 0 {
+                break;
+            }
+        }
 
+        unsafe {
             buf.set_len(buf.len() + printed_size);
         }
 
@@ -1162,21 +1174,23 @@ impl DisplaySink for BigEnoughString {
         // means we can write directly into the correct offsets of the output string.
         let printed_size = (((16 - v.leading_zeros()) >> 2) + 1) as usize;
 
-        unsafe {
-            let buf = unsafe { self.content.as_mut_vec() };
-            let p = buf.as_mut_ptr();
-            let mut curr = printed_size;
-            loop {
-                let digit = v % 16;
-                let c = c_to_hex(digit as u8);
-                curr -= 1;
+        let buf = unsafe { self.content.as_mut_vec() };
+        let p = buf.as_mut_ptr();
+        let mut curr = printed_size;
+        loop {
+            let digit = v % 16;
+            let c = c_to_hex(digit as u8);
+            curr -= 1;
+            unsafe {
                 p.offset(curr as isize).write(c);
-                v = v / 16;
-                if v == 0 {
-                    break;
-                }
             }
+            v = v / 16;
+            if v == 0 {
+                break;
+            }
+        }
 
+        unsafe {
             buf.set_len(buf.len() + printed_size);
         }
 
@@ -1193,21 +1207,23 @@ impl DisplaySink for BigEnoughString {
         // means we can write directly into the correct offsets of the output string.
         let printed_size = (((32 - v.leading_zeros()) >> 2) + 1) as usize;
 
-        unsafe {
-            let buf = unsafe { self.content.as_mut_vec() };
-            let p = buf.as_mut_ptr();
-            let mut curr = printed_size;
-            loop {
-                let digit = v % 16;
-                let c = c_to_hex(digit as u8);
-                curr -= 1;
+        let buf = unsafe { self.content.as_mut_vec() };
+        let p = buf.as_mut_ptr();
+        let mut curr = printed_size;
+        loop {
+            let digit = v % 16;
+            let c = c_to_hex(digit as u8);
+            curr -= 1;
+            unsafe {
                 p.offset(curr as isize).write(c);
-                v = v / 16;
-                if v == 0 {
-                    break;
-                }
             }
+            v = v / 16;
+            if v == 0 {
+                break;
+            }
+        }
 
+        unsafe {
             buf.set_len(buf.len() + printed_size);
         }
 
@@ -1224,23 +1240,23 @@ impl DisplaySink for BigEnoughString {
         // means we can write directly into the correct offsets of the output string.
         let printed_size = (((64 - v.leading_zeros()) >> 2) + 1) as usize;
 
-        unsafe {
-            let buf = unsafe { self.content.as_mut_vec() };
-            let p = buf.as_mut_ptr();
-            let mut curr = printed_size;
-            loop {
-                let digit = v % 16;
-                let c = c_to_hex(digit as u8);
-                curr -= 1;
+        let buf = unsafe { self.content.as_mut_vec() };
+        let p = buf.as_mut_ptr();
+        let mut curr = printed_size;
+        loop {
+            let digit = v % 16;
+            let c = c_to_hex(digit as u8);
+            curr -= 1;
+            unsafe {
                 p.offset(curr as isize).write(c);
-                v = v / 16;
-                if v == 0 {
-                    break;
-                }
             }
-
-            buf.set_len(buf.len() + printed_size);
+            v = v / 16;
+            if v == 0 {
+                break;
+            }
         }
+
+        unsafe { buf.set_len(buf.len() + printed_size); }
 
         Ok(())
     }
@@ -1547,7 +1563,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
             } else {
                 self.f.write_fixed_size("+ 0x")?;
             }
-            self.f.write_u32(v);
+            self.f.write_u32(v)?;
         }
         self.f.write_char(']')
     }
@@ -5200,7 +5216,7 @@ impl <'instr, T: fmt::Write, Y: YaxColors> ShowContextual<u64, NoContext, T, Y> 
                 let mut out = NoColorsSink {
                     out,
                 };
-                let mut out = &mut out;
+                let out = &mut out;
 
                 contextualize_intel(instr, out)
             }
@@ -5217,7 +5233,7 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::St
         let mut out = NoColorsSink {
             out,
         };
-        let mut out = &mut out;
+        let out = &mut out;
         use core::fmt::Write;
 
         if self.prefixes.lock() {
