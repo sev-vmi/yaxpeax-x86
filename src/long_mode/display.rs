@@ -5144,7 +5144,6 @@ impl Instruction {
             }
         }
 
-        /*
         let address: u64 = 0;
         let context = Some(&NoContext);
         let colors = &NoColors;
@@ -5176,11 +5175,16 @@ impl Instruction {
         if self.operand_count > 0 {
             danger_anguished_string_write(out, " ");
 
-            if self.visit_operand(0, &mut RelativeBranchPrinter {
-                inst: &self,
-                colors,
-                out,
-            })? {
+            let rel_res = {
+                let out = unsafe { core::mem::transmute::<&mut alloc::string::String, &mut BigEnoughString>(out) };
+                self.visit_operand(0, &mut RelativeBranchPrinter {
+                    inst: &self,
+                    out: &mut NoColorsSink {
+                        out: out,
+                    },
+                })?
+            };
+            if rel_res {
                 return Ok(());
             }
 
@@ -5797,7 +5801,6 @@ impl Instruction {
                 }
             }
         }
-            */
         Ok(())
     }
 
