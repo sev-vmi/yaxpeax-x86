@@ -1433,17 +1433,18 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
     }
     fn visit_disp(&mut self, reg: RegSpec, disp: i32) -> Result<Self::Ok, Self::Error> {
         unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
-        self.f.write_fixed_size(" ")?;
         if self.op_nr >= 4 {
             unsafe { core::hint::unreachable_unchecked(); }
         }
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
+            self.f.write_char(' ')?;
             self.f.write_char(name[0] as char)?;
             self.f.write_char(name[1] as char)?;
-            self.f.write_char(':')?;
+            self.f.write_fixed_size(":[")?;
+        } else {
+            self.f.write_fixed_size(" [")?;
         }
-        self.f.write_fixed_size("[")?;
         unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
         self.f.write_fixed_size(" ")?;
 
@@ -1461,33 +1462,35 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
     }
     fn visit_deref(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
-        self.f.write_fixed_size(" ")?;
         if self.op_nr >= 4 {
             unsafe { core::hint::unreachable_unchecked(); }
         }
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
+            self.f.write_char(' ')?;
             self.f.write_char(name[0] as char)?;
             self.f.write_char(name[1] as char)?;
-            self.f.write_char(':')?;
+            self.f.write_fixed_size(":[")?;
+        } else {
+            self.f.write_fixed_size(" [")?;
         }
-        self.f.write_fixed_size("[")?;
         unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
         self.f.write_fixed_size("]")
     }
     fn visit_reg_scale(&mut self, reg: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
         unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
-        self.f.write_fixed_size(" ")?;
         if self.op_nr >= 4 {
             unsafe { core::hint::unreachable_unchecked(); }
         }
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
+            self.f.write_char(' ')?;
             self.f.write_char(name[0] as char)?;
             self.f.write_char(name[1] as char)?;
-            self.f.write_char(':')?;
+            self.f.write_fixed_size(":[")?;
+        } else {
+            self.f.write_fixed_size(" [")?;
         }
-        self.f.write_fixed_size("[")?;
         unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
         self.f.write_fixed_size(" * ")?;
         self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
@@ -1497,17 +1500,18 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
     }
     fn visit_reg_scale_disp(&mut self, reg: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
         unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
-        self.f.write_fixed_size(" ")?;
         if self.op_nr >= 4 {
             unsafe { core::hint::unreachable_unchecked(); }
         }
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
+            self.f.write_char(' ')?;
             self.f.write_char(name[0] as char)?;
             self.f.write_char(name[1] as char)?;
-            self.f.write_char(':')?;
+            self.f.write_fixed_size(":[")?;
+        } else {
+            self.f.write_fixed_size(" [")?;
         }
-        self.f.write_fixed_size("[")?;
         unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
         self.f.write_fixed_size(" * ")?;
         self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
@@ -1527,17 +1531,18 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
     }
     fn visit_index_base_scale(&mut self, base: RegSpec, index: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
         unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
-        self.f.write_fixed_size(" ")?;
         if self.op_nr >= 4 {
             unsafe { core::hint::unreachable_unchecked(); }
         }
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
+            self.f.write_char(' ')?;
             self.f.write_char(name[0] as char)?;
             self.f.write_char(name[1] as char)?;
-            self.f.write_char(':')?;
+            self.f.write_fixed_size(":[")?;
+        } else {
+            self.f.write_fixed_size(" [")?;
         }
-        self.f.write_fixed_size("[")?;
         unsafe { self.f.write_lt_8(regspec_label(&base))?; }
         self.f.write_fixed_size(" + ")?;
         unsafe { self.f.write_lt_8(regspec_label(&index))?; }
@@ -1547,17 +1552,18 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
     }
     fn visit_index_base_scale_disp(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
         unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
-        self.f.write_fixed_size(" ")?;
         if self.op_nr >= 4 {
             unsafe { core::hint::unreachable_unchecked(); }
         }
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
+            self.f.write_char(' ')?;
             self.f.write_char(name[0] as char)?;
             self.f.write_char(name[1] as char)?;
-            self.f.write_char(':')?;
+            self.f.write_fixed_size(":[")?;
+        } else {
+            self.f.write_fixed_size(" [")?;
         }
-        self.f.write_fixed_size("[")?;
         unsafe { self.f.write_lt_8(regspec_label(&base))?; }
         self.f.write_fixed_size(" + ")?;
         unsafe { self.f.write_lt_8(regspec_label(&index))?; }
