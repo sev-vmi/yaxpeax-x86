@@ -6336,27 +6336,7 @@ impl<'a, Y: YaxColors, F: DisplaySink> crate::long_mode::OperandVisitor for Rela
                 // danger_anguished_string_write(&mut self.out, "+");
             }
             self.out.write_fixed_size("0x")?;
-            // danger_anguished_string_write(self.out, "0x");
-            let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 2];
-            let mut curr = buf.len();
-            loop {
-                let digit = v % 16;
-                let c = c_to_hex(digit as u8);
-                curr -= 1;
-                buf[curr].write(c);
-                v = v / 16;
-                if v == 0 {
-                    break;
-                }
-            }
-            let buf = &buf[curr..];
-            let s = unsafe {
-                core::mem::transmute::<&[core::mem::MaybeUninit<u8>], &str>(buf)
-            };
-
-            // not actually fixed size, but this should optimize right i hope..
-            self.out.write_fixed_size(s)?;
-//            anguished_string_write(&mut self.out, s);
+            self.out.write_u8(v)?;
             Ok(true)
         } else {
             Ok(false)
@@ -6377,29 +6357,7 @@ impl<'a, Y: YaxColors, F: DisplaySink> crate::long_mode::OperandVisitor for Rela
                 // danger_anguished_string_write(&mut self.out, "+");
             }
             self.out.write_fixed_size("0x")?;
-            // danger_anguished_string_write(self.out, "0x");
-            let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 8];
-            let mut curr = buf.len();
-            loop {
-                let digit = v % 16;
-                let c = c_to_hex(digit as u8);
-                curr -= 1;
-                buf[curr].write(c);
-                v = v / 16;
-                if v == 0 {
-                    break;
-                }
-            }
-            let buf = &buf[curr..];
-            let s = unsafe {
-                core::mem::transmute::<&[core::mem::MaybeUninit<u8>], &str>(buf)
-            };
-
-//                        danger_anguished_string_write(&mut self.out, s);
-
-            // danger_anguished_variable_length_bstring_write(unsafe { self.out.as_mut_vec() }, s.as_bytes());
-            // not actually fixed size, but this should optimize right i hope..
-            self.out.write_fixed_size(s)?;
+            self.out.write_u32(v)?;
             Ok(true)
         } else {
             Ok(false)
