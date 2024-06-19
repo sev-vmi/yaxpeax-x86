@@ -1275,6 +1275,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
     type Ok = ();
     type Error = core::fmt::Error;
 
+    #[cfg_attr(feature="profiling", inline(never))]
     fn visit_u8(&mut self, imm: u8) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
         self.f.write_fixed_size("0x")?;
@@ -1282,6 +1283,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
+    #[cfg_attr(feature="profiling", inline(never))]
     fn visit_i8(&mut self, imm: i8) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
         let mut v = imm as u8;
@@ -1294,6 +1296,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
+    #[cfg_attr(feature="profiling", inline(never))]
     fn visit_u16(&mut self, imm: u16) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
         self.f.write_fixed_size("0x")?;
@@ -1301,6 +1304,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
+    #[cfg_attr(feature="profiling", inline(never))]
     fn visit_i16(&mut self, imm: i16) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
         let mut v = imm as u16;
@@ -1313,6 +1317,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
+    #[cfg_attr(feature="profiling", inline(never))]
     fn visit_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
         self.f.write_fixed_size("0x")?;
@@ -1332,6 +1337,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
+    #[cfg_attr(feature="profiling", inline(never))]
     fn visit_u64(&mut self, imm: u64) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
         self.f.write_fixed_size("0x")?;
@@ -1339,6 +1345,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
+    #[cfg_attr(feature="profiling", inline(never))]
     fn visit_i64(&mut self, imm: i64) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Immediate);
         let mut v = imm as u64;
@@ -1351,6 +1358,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
+    #[cfg_attr(feature="profiling", inline(never))]
     fn visit_reg(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.span_enter(TokenType::Register);
         unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
