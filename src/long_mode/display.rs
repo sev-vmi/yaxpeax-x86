@@ -5826,6 +5826,9 @@ fn contextualize_intel<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fmt:
                 op_nr: i,
                 f: out,
             };
+            if i >= 4 {
+                unsafe { core::hint::unreachable_unchecked(); }
+            }
             instr.visit_operand(i as u8, &mut displayer)?;
             if let Some(evex) = instr.prefixes.evex() {
                 let x = Operand::from_spec(instr, instr.operands[i as usize]);
@@ -5873,7 +5876,15 @@ fn contextualize_intel<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fmt:
                             0
                         }
                     };
-                    write!(out, "{{1to{}}}", scale)?;
+                    out.write_fixed_size("{1to")?;
+                    static STRING_LUT: &'static [&'static str] = &[
+                        "0", "1", "2", "3", "4", "5", "6", "7", "8",
+                        "9", "10", "11", "12", "13", "14", "15", "16",
+                    ];
+                    unsafe {
+                        out.write_lt_16(STRING_LUT.get_kinda_unchecked(scale as usize))?;
+                    }
+                    out.write_char('}')?;
                 }
             }
         }
