@@ -885,8 +885,8 @@ impl DisplaySink for alloc::string::String {
 
         Ok(())
     }
-    fn span_enter(&mut self, ty: TokenType) {}
-    fn span_end(&mut self, ty: TokenType) {}
+    fn span_enter(&mut self, _ty: TokenType) {}
+    fn span_end(&mut self, _ty: TokenType) {}
 }
 
 impl DisplaySink for BigEnoughString {
@@ -1260,8 +1260,8 @@ impl DisplaySink for BigEnoughString {
 
         Ok(())
     }
-    fn span_enter(&mut self, ty: TokenType) {}
-    fn span_end(&mut self, ty: TokenType) {}
+    fn span_enter(&mut self, _ty: TokenType) {}
+    fn span_end(&mut self, _ty: TokenType) {}
 }
 
 impl BigEnoughString {
@@ -4709,7 +4709,7 @@ fn contextualize_intel<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fmt:
         }
 
         if instr.operands[0 as usize].is_memory() {
-            unsafe { out.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(instr.mem_size as usize))? };
+            unsafe { out.write_lt_8(mem_size_label(instr.mem_size))? };
             if let Some(prefix) = instr.segment_override_for_op(0) {
                 let name = prefix.name();
                 out.write_char(' ')?;
@@ -4735,7 +4735,7 @@ fn contextualize_intel<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fmt:
             }
 
             if instr.operands[i as usize].is_memory() {
-                unsafe { out.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(instr.mem_size as usize))? };
+                unsafe { out.write_lt_8(mem_size_label(instr.mem_size))? };
                 if i >= 4 {
                     unsafe { core::hint::unreachable_unchecked(); }
                 }
@@ -5151,7 +5151,7 @@ fn contextualize_c<T: fmt::Write>(instr: &Instruction, _address: u64, _context: 
 }
 
 impl <'instr, T: fmt::Write, Y: YaxColors> ShowContextual<u64, NoContext, T, Y> for InstructionDisplayer<'instr> {
-    fn contextualize(&self, colors: &Y, address: u64, context: Option<&NoContext>, out: &mut T) -> fmt::Result {
+    fn contextualize(&self, _colors: &Y, address: u64, context: Option<&NoContext>, out: &mut T) -> fmt::Result {
         let InstructionDisplayer {
             instr,
             style,
