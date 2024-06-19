@@ -555,6 +555,10 @@ impl DisplaySink for alloc::string::String {
 
             let mut rem = new_bytes.len() as isize;
 
+            // set_len early because there is no way to avoid the following asm!() writing that
+            // same number of bytes into buf
+            buf.set_len(buf.len() + new_bytes.len());
+
             core::arch::asm!(
                 "6:",
                 "cmp {rem:e}, 16",
@@ -598,8 +602,6 @@ impl DisplaySink for alloc::string::String {
                 buf = out(reg) _,
                 options(nostack),
             );
-
-            buf.set_len(buf.len() + new_bytes.len());
         }
         /*
         for i in 0..new_bytes.len() {
@@ -632,6 +634,10 @@ impl DisplaySink for alloc::string::String {
             let src = new_bytes.as_ptr();
 
             let mut rem = new_bytes.len() as isize;
+
+            // set_len early because there is no way to avoid the following asm!() writing that
+            // same number of bytes into buf
+            buf.set_len(buf.len() + new_bytes.len());
 
             core::arch::asm!(
                 "7:",
@@ -667,8 +673,6 @@ impl DisplaySink for alloc::string::String {
                 buf = out(reg) _,
                 options(nostack),
             );
-
-            buf.set_len(buf.len() + new_bytes.len());
         }
         /*
         for i in 0..new_bytes.len() {
@@ -702,6 +706,10 @@ impl DisplaySink for alloc::string::String {
 
             let mut rem = new_bytes.len() as isize;
 
+            // set_len early because there is no way to avoid the following asm!() writing that
+            // same number of bytes into buf
+            buf.set_len(buf.len() + new_bytes.len());
+
             core::arch::asm!(
                 "8:",
                 "cmp {rem:e}, 4",
@@ -729,8 +737,6 @@ impl DisplaySink for alloc::string::String {
                 buf = out(reg) _,
                 options(nostack),
             );
-
-            buf.set_len(buf.len() + new_bytes.len());
         }
         /*
         for i in 0..new_bytes.len() {
@@ -926,6 +932,10 @@ impl DisplaySink for BigEnoughString {
 
             let mut rem = new_bytes.len() as isize;
 
+            // set_len early because there is no way to avoid the following asm!() writing that
+            // same number of bytes into buf
+            buf.set_len(buf.len() + new_bytes.len());
+
             core::arch::asm!(
                 "6:",
                 "cmp {rem:e}, 16",
@@ -969,8 +979,6 @@ impl DisplaySink for BigEnoughString {
                 buf = out(reg) _,
                 options(nostack),
             );
-
-            buf.set_len(buf.len() + new_bytes.len());
         }
         /*
         for i in 0..new_bytes.len() {
@@ -1001,6 +1009,10 @@ impl DisplaySink for BigEnoughString {
             let src = new_bytes.as_ptr();
 
             let mut rem = new_bytes.len() as isize;
+
+            // set_len early because there is no way to avoid the following asm!() writing that
+            // same number of bytes into buf
+            buf.set_len(buf.len() + new_bytes.len());
 
             core::arch::asm!(
                 "7:",
@@ -1036,8 +1048,6 @@ impl DisplaySink for BigEnoughString {
                 buf = out(reg) _,
                 options(nostack),
             );
-
-            buf.set_len(buf.len() + new_bytes.len());
         }
         /*
         for i in 0..new_bytes.len() {
@@ -1069,6 +1079,10 @@ impl DisplaySink for BigEnoughString {
 
             let mut rem = new_bytes.len() as isize;
 
+            // set_len early because there is no way to avoid the following asm!() writing that
+            // same number of bytes into buf
+            buf.set_len(buf.len() + new_bytes.len());
+
             core::arch::asm!(
                 "8:",
                 "cmp {rem:e}, 4",
@@ -1096,8 +1110,6 @@ impl DisplaySink for BigEnoughString {
                 buf = out(reg) _,
                 options(nostack),
             );
-
-            buf.set_len(buf.len() + new_bytes.len());
         }
         /*
         for i in 0..new_bytes.len() {
