@@ -740,6 +740,7 @@ impl DisplaySink for alloc::string::String {
     /// this is provided for optimization opportunities when the formatted integer can be written
     /// directly to the sink (rather than formatted to an intermediate buffer and output as a
     /// followup step)
+    #[inline(always)]
     fn write_u8(&mut self, mut v: u8) -> Result<(), core::fmt::Error> {
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
@@ -803,6 +804,7 @@ impl DisplaySink for alloc::string::String {
     /// this is provided for optimization opportunities when the formatted integer can be written
     /// directly to the sink (rather than formatted to an intermediate buffer and output as a
     /// followup step)
+    #[inline(always)]
     fn write_u32(&mut self, mut v: u32) -> Result<(), core::fmt::Error> {
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
@@ -1073,6 +1075,7 @@ impl DisplaySink for BigEnoughString {
     /// this is provided for optimization opportunities when the formatted integer can be written
     /// directly to the sink (rather than formatted to an intermediate buffer and output as a
     /// followup step)
+    #[inline(always)]
     fn write_u8(&mut self, mut v: u8) -> Result<(), core::fmt::Error> {
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
@@ -1133,6 +1136,7 @@ impl DisplaySink for BigEnoughString {
     /// this is provided for optimization opportunities when the formatted integer can be written
     /// directly to the sink (rather than formatted to an intermediate buffer and output as a
     /// followup step)
+    #[inline(always)]
     fn write_u32(&mut self, mut v: u32) -> Result<(), core::fmt::Error> {
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
