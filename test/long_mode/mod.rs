@@ -15,6 +15,19 @@ use std::fmt::Write;
 use yaxpeax_arch::{AddressBase, Decoder, LengthedInstruction};
 use yaxpeax_x86::long_mode::InstDecoder;
 
+#[test]
+#[cfg(feature="std")]
+fn test_write_hex_specialization() {
+    use crate::yaxpeax_x86::long_mode::DisplaySink;
+    for i in 0..0xffu8 {
+        let mut out = yaxpeax_x86::long_mode::BigEnoughString::new();
+        out.write_char('0').unwrap();
+        out.write_char('x').unwrap();
+        out.write_u8(i).unwrap();
+        assert_eq!(out.into_inner(), format!("0x{:x}", i));
+    }
+}
+
 fn test_invalid(data: &[u8]) {
     test_invalid_under(&InstDecoder::default(), data);
 }
@@ -62,21 +75,49 @@ fn test_display_under(decoder: &InstDecoder, data: &[u8], expected: &'static str
                         text,
                         expected
                     );
+
                     let mut text2 = yaxpeax_x86::long_mode::BigEnoughString::new();
                     let mut out = yaxpeax_x86::long_mode::NoColorsSink {
                         out: &mut text2,
                     };
-                    instr.write_to(&mut out);
+                    instr.write_to(&mut out).expect("printing succeeds");
                     core::mem::drop(out);
                     let text2 = text2.into_inner();
 
                     assert!(
                         text2 == text,
-                        "display error for {}:\n  decoded: {:?} under decoder {}\n displayed: {}\n expected: {}\n",
+                        "display error through NoColorsSink for {}:\n  decoded: {:?} under decoder {}\n displayed: {}\n expected: {}\n",
                         hex,
                         instr,
                         decoder,
                         text2,
+                        text,
+                    );
+
+                    let mut text3 = yaxpeax_x86::long_mode::BigEnoughString::new();
+                    instr.write_to(&mut text3).expect("printing succeeds");
+                    let text3 = text3.into_inner();
+
+                    assert!(
+                        text3 == text,
+                        "display error through BigEnoughString for {}:\n  decoded: {:?} under decoder {}\n displayed: {}\n expected: {}\n",
+                        hex,
+                        instr,
+                        decoder,
+                        text3,
+                        text,
+                    );
+
+                    let mut text4 = String::new();
+                    instr.write_to(&mut text4).expect("printing succeeds");
+
+                    assert!(
+                        text4 == text,
+                        "display error through String for {}:\n  decoded: {:?} under decoder {}\n displayed: {}\n expected: {}\n",
+                        hex,
+                        instr,
+                        decoder,
+                        text4,
                         text,
                     );
                 } else {
