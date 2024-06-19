@@ -1385,7 +1385,11 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
             self.f.write_char(name[1] as char)?;
             self.f.write_char(':')?;
         }
-        write!(self.f, "[{}]", self.colors.address(u32_hex(imm)))
+        self.f.write_fixed_size("[")?;
+        self.f.write_fixed_size("0x")?;
+        self.f.write_u32(imm)?;
+        self.f.write_fixed_size("]")?;
+        Ok(())
     }
     fn visit_abs_u64(&mut self, imm: u64) -> Result<Self::Ok, Self::Error> {
         unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
@@ -1476,27 +1480,9 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
             } else {
                 self.f.write_fixed_size("+ 0x")?;
             }
-            let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 8];
-            let mut curr = buf.len();
-            loop {
-                let digit = v % 16;
-                let c = c_to_hex(digit as u8);
-                curr -= 1;
-                buf[curr].write(c);
-                v = v / 16;
-                if v == 0 {
-                    break;
-                }
-            }
-            let buf = &buf[curr..];
-            let s = unsafe {
-                core::mem::transmute::<&[core::mem::MaybeUninit<u8>], &str>(buf)
-            };
-
-            // not actually fixed size, but this should optimize right i hope..
-            unsafe { self.f.write_lt_16(s)?; }
+            self.f.write_u32(v);
         }
-        write!(self.f, "]")
+        self.f.write_char(']')
     }
     fn visit_index_base_scale(&mut self, base: RegSpec, index: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
         unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
@@ -1540,25 +1526,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
             } else {
                 self.f.write_fixed_size("+ 0x")?;
             }
-            let mut buf = [core::mem::MaybeUninit::<u8>::uninit(); 8];
-            let mut curr = buf.len();
-            loop {
-                let digit = v % 16;
-                let c = c_to_hex(digit as u8);
-                curr -= 1;
-                buf[curr].write(c);
-                v = v / 16;
-                if v == 0 {
-                    break;
-                }
-            }
-            let buf = &buf[curr..];
-            let s = unsafe {
-                core::mem::transmute::<&[core::mem::MaybeUninit<u8>], &str>(buf)
-            };
-
-            // not actually fixed size, but this should optimize right i hope..
-            unsafe { self.f.write_lt_16(s)?; }
+            self.f.write_u32(v)?;
         }
         self.f.write_fixed_size("]")
     }
