@@ -4383,6 +4383,7 @@ impl Instruction {
     /// if the work you expect to do per-operand is very small, constructing an `Operand` and
     /// dispatching on tags may be a substantial factor of overall runtime. `visit_operand` can
     /// reduce total overhead in such cases.
+    #[cfg_attr(features="profiling", inline(never))]
     fn visit_operand<T: OperandVisitor>(&self, i: u8, visitor: &mut T) -> Result<T::Ok, T::Error> {
         assert!(i < 4);
         let spec = self.operands[i as usize];
@@ -6009,7 +6010,8 @@ const OPCODES: [OpcodeRecord; 256] = [
 ];
 
 #[allow(non_snake_case)]
-#[inline(always)]
+#[cfg_attr(feature="profiling", inline(never))]
+#[cfg_attr(not(feature="profiling"), inline(always))]
 pub(self) fn read_E<
     T: Reader<<Arch as yaxpeax_arch::Arch>::Address, <Arch as yaxpeax_arch::Arch>::Word>,
     S: DescriptionSink<FieldDescription>,
@@ -6638,6 +6640,7 @@ impl DecodeCtx {
         self.rb_size
     }
 
+#[cfg_attr(feature="profiling", inline(never))]
 fn read_opc_hotpath<
     T: Reader<<Arch as yaxpeax_arch::Arch>::Address, <Arch as yaxpeax_arch::Arch>::Word>,
     S: DescriptionSink<FieldDescription>,
@@ -6694,7 +6697,8 @@ fn read_opc_hotpath<
     }
 }
 
-#[inline(always)]
+#[cfg_attr(feature="profiling", inline(never))]
+#[cfg_attr(not(feature="profiling"), inline(always))]
 fn read_with_annotations<
     T: Reader<<Arch as yaxpeax_arch::Arch>::Address, <Arch as yaxpeax_arch::Arch>::Word>,
     S: DescriptionSink<FieldDescription>,
@@ -6912,7 +6916,8 @@ fn read_avx_prefixed<
     return Ok(());
 }
 
-#[inline(always)]
+#[cfg_attr(feature="profiling", inline(never))]
+#[cfg_attr(not(feature="profiling"), inline(always))]
 fn read_operands<
     T: Reader<<Arch as yaxpeax_arch::Arch>::Address, <Arch as yaxpeax_arch::Arch>::Word>,
     S: DescriptionSink<FieldDescription>

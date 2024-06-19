@@ -384,7 +384,6 @@ pub trait DisplaySink: fmt::Write {
     /// utf-8 string. this may corrupt Rust strings.
     unsafe fn write_lt_32(&mut self, s: &str) -> Result<(), core::fmt::Error> {
         self.write_str(s)
-
     }
     /// write a string to this sink that is less than 16 bytes. this is provided for optimization
     /// opportunities when writing a variable-length string with known max size.
@@ -5769,12 +5768,14 @@ impl Instruction {
         Ok(())
     }
 
+    #[cfg_attr(feature="profiling", inline(never))]
     pub fn write_to<T: DisplaySink>(&self, out: &mut T) -> fmt::Result {
         contextualize_intel(self, out)
 //        self.display_with(DisplayStyle::Intel).contextualize(&NoColors, 0, Some(&NoContext), out)
     }
 }
 
+#[cfg_attr(feature="profiling", inline(never))]
 fn contextualize_intel<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fmt::Result {
     if instr.xacquire() {
         out.write_fixed_size("xacquire ")?;

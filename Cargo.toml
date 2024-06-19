@@ -52,3 +52,7 @@ colors = ["yaxpeax-arch/colors"]
 # This enables some capstone benchmarks over the same
 # instruction bytes used to bench this code.
 capstone_bench = []
+
+# this disables a lot of inlining to make it easier for me to measure
+# likelihood of codepaths for typical instruction sequences
+profiling = []
