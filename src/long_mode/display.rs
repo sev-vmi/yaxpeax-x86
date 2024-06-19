@@ -1189,16 +1189,15 @@ impl BigEnoughString {
     }
 }
 
-struct ColorizingOperandVisitor<'a, T, Y> {
+struct ColorizingOperandVisitor<'a, T> {
     instr: &'a Instruction,
     op_nr: u8,
-    colors: &'a Y,
     f: &'a mut T,
 }
 
 use core::mem::MaybeUninit;
 
-impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for ColorizingOperandVisitor<'_, T, Y> {
+impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisitor<'_, T> {
     type Ok = ();
     type Error = core::fmt::Error;
 
@@ -1420,7 +1419,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
             self.f.write_char(name[1] as char)?;
             self.f.write_char(':')?;
         }
-        write!(self.f, "[{}]", self.colors.address(u64_hex(imm)))
+        write!(self.f, "[{}]", u64_hex(imm))
     }
     fn visit_disp(&mut self, reg: RegSpec, disp: i32) -> Result<Self::Ok, Self::Error> {
         unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
@@ -1556,7 +1555,14 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         self.f.write_char('[')?;
         unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
         self.f.write_char(' ')?;
-        format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
+        let mut v = disp as u32;
+        if disp < 0 {
+            self.f.write_fixed_size("- 0x")?;
+            v = -disp as u32;
+        } else {
+            self.f.write_fixed_size("+ 0x")?;
+        }
+        self.f.write_u32(v)?;
         write!(self.f, "]")?;
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
@@ -1573,7 +1579,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         self.f.write_fixed_size(" ")?;
         write!(self.f, "[{} * {}]",
             regspec_label(&spec),
-            self.colors.number(scale)
+            scale
         )?;
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
@@ -1582,9 +1588,16 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         self.f.write_fixed_size(" ")?;
         write!(self.f, "[{} * {} ",
             regspec_label(&spec),
-            self.colors.number(scale),
+            scale,
         )?;
-        format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
+        let mut v = disp as u32;
+        if disp < 0 {
+            self.f.write_fixed_size("- 0x")?;
+            v = -disp as u32;
+        } else {
+            self.f.write_fixed_size("+ 0x")?;
+        }
+        self.f.write_u32(v)?;
         write!(self.f, "]")?;
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
@@ -1605,7 +1618,14 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
             regspec_label(&base),
             regspec_label(&index),
         )?;
-        format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
+        let mut v = disp as u32;
+        if disp < 0 {
+            self.f.write_fixed_size("- 0x")?;
+            v = -disp as u32;
+        } else {
+            self.f.write_fixed_size("+ 0x")?;
+        }
+        self.f.write_u32(v)?;
         write!(self.f, "]")?;
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
@@ -1615,7 +1635,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         write!(self.f, "[{} + {} * {}]",
             regspec_label(&base),
             regspec_label(&index),
-            self.colors.number(scale)
+            scale
         )?;
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
@@ -1625,9 +1645,16 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         write!(self.f, "[{} + {} * {} ",
             regspec_label(&base),
             regspec_label(&index),
-            self.colors.number(scale),
+            scale,
         )?;
-        format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
+        let mut v = disp as u32;
+        if disp < 0 {
+            self.f.write_fixed_size("- 0x")?;
+            v = -disp as u32;
+        } else {
+            self.f.write_fixed_size("+ 0x")?;
+        }
+        self.f.write_u32(v)?;
         write!(self.f, "]")?;
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
@@ -5740,12 +5767,12 @@ impl Instruction {
     }
 
     pub fn write_to<T: DisplaySink>(&self, out: &mut T) -> fmt::Result {
-        contextualize_intel(self, &NoColors, 0, Some(&NoContext), out)
+        contextualize_intel(self, 0, Some(&NoContext), out)
 //        self.display_with(DisplayStyle::Intel).contextualize(&NoColors, 0, Some(&NoContext), out)
     }
 }
 
-fn contextualize_intel<T: DisplaySink, Y: YaxColors>(instr: &Instruction, colors: &Y, _address: u64, _context: Option<&NoContext>, out: &mut T) -> fmt::Result {
+fn contextualize_intel<T: DisplaySink>(instr: &Instruction, _address: u64, _context: Option<&NoContext>, out: &mut T) -> fmt::Result {
     if instr.xacquire() {
         out.write_fixed_size("xacquire ")?;
     }
@@ -5774,7 +5801,6 @@ fn contextualize_intel<T: DisplaySink, Y: YaxColors>(instr: &Instruction, colors
 
         if instr.visit_operand(0, &mut RelativeBranchPrinter {
             inst: instr,
-            colors,
             out,
         })? {
             return Ok(());
@@ -5784,7 +5810,6 @@ fn contextualize_intel<T: DisplaySink, Y: YaxColors>(instr: &Instruction, colors
             instr,
             op_nr: 0,
             f: out,
-            colors,
         };
         instr.visit_operand(0 as u8, &mut displayer)?;
 
@@ -5796,7 +5821,6 @@ fn contextualize_intel<T: DisplaySink, Y: YaxColors>(instr: &Instruction, colors
                 instr,
                 op_nr: i,
                 f: out,
-                colors,
             };
             instr.visit_operand(i as u8, &mut displayer)?;
             if let Some(evex) = instr.prefixes.evex() {
@@ -5853,7 +5877,7 @@ fn contextualize_intel<T: DisplaySink, Y: YaxColors>(instr: &Instruction, colors
     Ok(())
 }
 
-fn contextualize_c<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors: &Y, _address: u64, _context: Option<&NoContext>, out: &mut T) -> fmt::Result {
+fn contextualize_c<T: fmt::Write>(instr: &Instruction, _address: u64, _context: Option<&NoContext>, out: &mut T) -> fmt::Result {
     let mut brace_count = 0;
 
     let mut prefixed = false;
@@ -5899,20 +5923,20 @@ fn contextualize_c<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors: &Y,
         }
     }
 
-    fn write_jmp_operand<T: fmt::Write, Y: YaxColors>(op: Operand, colors: &Y, out: &mut T) -> fmt::Result {
+    fn write_jmp_operand<T: fmt::Write>(op: Operand, out: &mut T) -> fmt::Result {
         match op {
             Operand::ImmediateI8(rel) => {
                 if rel >= 0 {
-                    write!(out, "$+{}", colors.number(signed_i32_hex(rel as i32)))
+                    write!(out, "$+{}", (signed_i32_hex(rel as i32)))
                 } else {
-                    write!(out, "${}", colors.number(signed_i32_hex(rel as i32)))
+                    write!(out, "${}", (signed_i32_hex(rel as i32)))
                 }
             }
             Operand::ImmediateI32(rel) => {
                 if rel >= 0 {
-                    write!(out, "$+{}", colors.number(signed_i32_hex(rel)))
+                    write!(out, "$+{}", (signed_i32_hex(rel)))
                 } else {
-                    write!(out, "${}", colors.number(signed_i32_hex(rel)))
+                    write!(out, "${}", (signed_i32_hex(rel)))
                 }
             }
             other => {
@@ -6076,87 +6100,87 @@ fn contextualize_c<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors: &Y,
         }
         Opcode::JMP => {
             out.write_str("jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::JRCXZ => {
             out.write_str("if rcx == 0 then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::LOOP => {
             out.write_str("rcx--; if rcx != 0 then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::LOOPZ => {
             out.write_str("rcx--; if rcx != 0 and zero(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::LOOPNZ => {
             out.write_str("rcx--; if rcx != 0 and !zero(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::JO => {
             out.write_str("if _(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::JNO => {
             out.write_str("if _(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::JB => {
             out.write_str("if /* unsigned */ below(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::JNB => {
             out.write_str("if /* unsigned */ above_or_equal(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::JZ => {
             out.write_str("if zero(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::JNZ => {
             out.write_str("if !zero(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::JNA => {
             out.write_str("if /* unsigned */ below_or_equal(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::JA => {
             out.write_str("if /* unsigned */ above(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::JS => {
             out.write_str("if signed(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::JNS => {
             out.write_str("if !signed(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::JP => {
             out.write_str("if parity(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::JNP => {
             out.write_str("if !parity(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::JL => {
             out.write_str("if /* signed */ less(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::JGE => {
             out.write_str("if /* signed */ greater_or_equal(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::JLE => {
             out.write_str("if /* signed */ less_or_equal(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::JG => {
             out.write_str("if /* signed */ greater(rflags) then jmp ")?;
-            write_jmp_operand(instr.operand(0), colors, out)?;
+            write_jmp_operand(instr.operand(0), out)?;
         },
         Opcode::NOP => {
             write!(out, "nop")?;
@@ -6201,10 +6225,10 @@ impl <'instr, T: fmt::Write, Y: YaxColors> ShowContextual<u64, NoContext, T, Y> 
                 };
                 let mut out = &mut out;
 
-                contextualize_intel(instr, colors, address, context, out)
+                contextualize_intel(instr, address, context, out)
             }
             DisplayStyle::C => {
-                contextualize_c(instr, colors, address, context, out)
+                contextualize_c(instr, address, context, out)
             }
         }
     }
@@ -6255,7 +6279,6 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::St
                     instr: self,
                     op_nr: 0,
                     f: out,
-                    colors,
                 };
                 self.visit_operand(0, &mut displayer)?;
             }
@@ -6275,7 +6298,6 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::St
                                 instr: self,
                                 op_nr: i as u8,
                                 f: out,
-                                colors,
                             };
                             self.visit_operand(i as u8, &mut displayer)?;
                         }
@@ -6300,13 +6322,12 @@ static RELATIVE_BRANCHES: [Opcode; 21] = [
     Opcode::JLE, Opcode::JG,
 ];
 
-struct RelativeBranchPrinter<'a, Y: YaxColors, F: DisplaySink> {
+struct RelativeBranchPrinter<'a, F: DisplaySink> {
     inst: &'a Instruction,
-    colors: &'a Y,
     out: &'a mut F,
 }
 
-impl<'a, Y: YaxColors, F: DisplaySink> crate::long_mode::OperandVisitor for RelativeBranchPrinter<'a, Y, F> {
+impl<'a, F: DisplaySink> crate::long_mode::OperandVisitor for RelativeBranchPrinter<'a, F> {
     // return true if we printed a relative branch offset, false otherwise
     type Ok = bool;
     // but errors are errors
