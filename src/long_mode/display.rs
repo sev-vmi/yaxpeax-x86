@@ -1380,7 +1380,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         Ok(())
     }
     fn visit_abs_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
+        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
@@ -1395,7 +1395,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         Ok(())
     }
     fn visit_abs_u64(&mut self, imm: u64) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
+        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
@@ -1406,7 +1406,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         write!(self.f, "[{}]", self.colors.address(u64_hex(imm)))
     }
     fn visit_disp(&mut self, reg: RegSpec, disp: i32) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
+        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
@@ -1431,7 +1431,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         self.f.write_fixed_size("]")
     }
     fn visit_deref(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
+        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
@@ -1444,7 +1444,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         self.f.write_fixed_size("]")
     }
     fn visit_reg_scale(&mut self, reg: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
+        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
@@ -1461,7 +1461,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         Ok(())
     }
     fn visit_reg_scale_disp(&mut self, reg: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
+        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
@@ -1488,7 +1488,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         self.f.write_char(']')
     }
     fn visit_index_base_scale(&mut self, base: RegSpec, index: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
+        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
@@ -1505,7 +1505,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         self.f.write_fixed_size("]")
     }
     fn visit_index_base_scale_disp(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
+        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         if let Some(prefix) = self.instr.segment_override_for_op(self.op_nr) {
             let name = prefix.name();
@@ -1534,7 +1534,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         self.f.write_fixed_size("]")
     }
     fn visit_reg_disp_masked(&mut self, spec: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
+        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         write!(self.f, "[{} ", regspec_label(&spec))?;
         format_number_i32(self.colors, self.f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
@@ -1542,7 +1542,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
     fn visit_reg_deref_masked(&mut self, spec: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
+        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         self.f.write_fixed_size("[")?;
         self.f.write_str(regspec_label(&spec))?;
@@ -1550,7 +1550,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
     fn visit_reg_scale_masked(&mut self, spec: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
+        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         write!(self.f, "[{} * {}]",
             regspec_label(&spec),
@@ -1559,7 +1559,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
     fn visit_reg_scale_disp_masked(&mut self, spec: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
+        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         write!(self.f, "[{} * {} ",
             regspec_label(&spec),
@@ -1570,7 +1570,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
     fn visit_index_base_masked(&mut self, base: RegSpec, index: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
+        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         self.f.write_fixed_size("[")?;
         self.f.write_str(regspec_label(&base))?;
@@ -1580,7 +1580,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
     fn visit_index_base_disp_masked(&mut self, base: RegSpec, index: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
+        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         write!(self.f, "[{} + {} ",
             regspec_label(&base),
@@ -1591,7 +1591,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
     fn visit_index_base_scale_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
+        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         write!(self.f, "[{} + {} * {}]",
             regspec_label(&base),
@@ -1601,7 +1601,7 @@ impl <T: DisplaySink, Y: YaxColors> crate::long_mode::OperandVisitor for Coloriz
         write!(self.f, "{{{}}}", regspec_label(&mask_reg))
     }
     fn visit_index_base_scale_disp_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS[self.instr.mem_size as usize])? };
+        unsafe { self.f.write_lt_8(MEM_SIZE_STRINGS.get_kinda_unchecked(self.instr.mem_size as usize))? };
         self.f.write_fixed_size(" ")?;
         write!(self.f, "[{} + {} * {} ",
             regspec_label(&base),
