@@ -4,6 +4,7 @@ use yaxpeax_arch::{Colorize, ShowContextual, NoColors, YaxColors};
 use yaxpeax_arch::display::*;
 
 use crate::safer_unchecked::GetSaferUnchecked as _;
+use crate::safer_unchecked::unreachable_kinda_unchecked;
 use crate::MEM_SIZE_STRINGS;
 use crate::long_mode::{RegSpec, Opcode, Operand, MergeMode, InstDecoder, Instruction, Segment, PrefixRex, OperandSpec};
 
@@ -370,6 +371,40 @@ pub enum TokenType {
     Offset,
 }
 
+/// `DisplaySink` allows client code to collect output and minimal markup. this is currently used
+/// in formatting instructions for two reasons:
+/// * `DisplaySink` implementations have the opportunity to collect starts and ends of tokens at
+///   the same time as collecting output itself.
+/// * `DisplaySink` implementations provides specialized functions for writing strings in
+///   circumstances where a simple "use `core::fmt`" might incur unwanted overhead.
+///
+/// spans are reported through `span_start` and `span_exit` to avoid constraining implementations
+/// into tracking current output offset (which may not be knowable) or span size (which may be
+/// knowable, but incur additional overhead to compute or track).
+///
+/// spans are entered and exited in a FILO manner: a function writing to some `DisplaySink` must
+/// exit spans in reverse order to when they are entered. a function sequence like
+/// `sink.span_start(Operand); sink.span_start(Immediate); sink.span_exit(Operand)` is in error.
+///
+/// the `write_*` helpers on `DisplaySink` may be able to take advantage of contraints described in
+/// documentation here to better support writing some kinds of inputs than a fully-general solution
+/// (such as `core::fmt`) might be able to yield.
+///
+/// currently there are two motivating factors for `write_*` helpers:
+///
+/// instruction formatting often involves writing small but variable-size strings, such as register
+/// names, which is something of a pathological case for string appending as Rust currently exists:
+/// this often becomes `memcpy` and specifically a call to the platform's `memcpy` (rather than an
+/// inlined `rep movsb`) just to move 3-5 bytes. one relevant Rust issue for reference:
+/// https://github.com/rust-lang/rust/issues/92993#issuecomment-2028915232
+///
+/// there are similar papercuts around formatting integers as base-16 numbers, such as
+/// https://github.com/rust-lang/rust/pull/122770 . in isolation and in most applications these are
+/// not a significant source of overhead. but for programs bounded on decoding and printing
+/// instructions, these can add up to significant overhead - on the order of 10-20% of total
+/// runtime.
+///
+/// `DisplaySink`
 pub trait DisplaySink: fmt::Write {
     #[inline(always)]
     fn write_fixed_size(&mut self, s: &str) -> Result<(), core::fmt::Error> {
@@ -436,9 +471,30 @@ pub trait DisplaySink: fmt::Write {
     fn write_u64(&mut self, v: u64) -> Result<(), core::fmt::Error> {
         write!(self, "{:x}", v)
     }
-    // fn write_char(&mut self, c: char) -> Result<(), core::fmt::Error>;
-    fn span_enter(&mut self, ty: TokenType);
-    fn span_end(&mut self, ty: TokenType);
+    /// enter a region inside which output corresponds to a `ty`.
+    ///
+    /// the default implementation of these functions is as a no-op. this way, providing span
+    /// information to a `DisplaySink` that does not want it is eliminated at compile time.
+    ///
+    /// spans are entered and ended in a FILO manner: a function writing to some `DisplaySink` must
+    /// end spans in reverse order to when they are entered. a function sequence like
+    /// `sink.span_start(Operand); sink.span_start(Immediate); sink.span_end(Operand)` is in error.
+    ///
+    /// a simple use of `span_start`/`span_end` might look something like:
+    /// ```compile_fail
+    /// sink.span_start(Operand)
+    /// sink.write_char('[')
+    /// sink.span_start(Register)
+    /// sink.write_fixed_size("rbp")
+    /// sink.span_end(Register)
+    /// sink.write_char(']')
+    /// sink.span_end(Operand)
+    /// ```
+    /// which writes the text `[rbp]`, with span indicators where the operand (`[ ... ]`) begins,
+    /// as well as the start and end of a register name.
+    fn span_start(&mut self, _ty: TokenType) { }
+    /// end a region where a `ty` was written. see docs on [`DisplaySink::span_start`] for more.
+    fn span_end(&mut self, _ty: TokenType) { }
 }
 
 pub struct NoColorsSink<'a, T: fmt::Write> {
@@ -446,7 +502,7 @@ pub struct NoColorsSink<'a, T: fmt::Write> {
 }
 
 impl<'a, T: fmt::Write> DisplaySink for NoColorsSink<'a, T> {
-    fn span_enter(&mut self, _ty: TokenType) { }
+    fn span_start(&mut self, _ty: TokenType) { }
     fn span_end(&mut self, _ty: TokenType) { }
 }
 
@@ -462,44 +518,135 @@ impl<'a, T: fmt::Write> fmt::Write for NoColorsSink<'a, T> {
     }
 }
 
-/*
-impl<T: fmt::Write> DisplaySink for T {
-
-    /*
-    fn write_str(&mut self) -> Result<(), core::fmt::Error> {
-        <Self as fmt::Write>::write_str(self, s)
-    }
-    fn write_char(&mut self) -> Result<(), core::fmt::Error> {
-        <Self as fmt::Write>::write_char(self, c)
-    }
-    */
-    fn span_enter(&mut self, _ty: TokenType) { }
-    fn span_end(&mut self, _ty: TokenType) { }
-}
-*/
-
-pub struct BigEnoughString {
+/// helper to format `amd64` instructions with highest throughupt and least configuration.
+///
+/// ### when to use this over `fmt::Display`?
+///
+/// `fmt::Display` is a fair choice in most cases. in some cases, `InstructionFormatter` may
+/// support formatting options that may be difficult to configure for a `Display` impl.
+/// additionally, `InstructionFormatter` may be able to specialize more effectively where
+/// `fmt::Display`, writing to a generic `fmt::Write`, may not.
+///
+/// if your use case for `yaxpeax-x86` involves being bounded on the speed of disassembling and
+/// formatting instructions, [`InstructionFormatter::format_inst`] has been measured as up to 11%
+/// faster than an equivalent `write!(buf, "{}", inst)`.
+///
+/// `InstructionFormatter` involves internal allocations; if your use case for `yaxpeax-x86`
+/// requires allocations never occurring, it is not an appropriate tool.
+///
+/// ### example
+///
+/// ```
+/// use yaxpeax_x86::long_mode::InstDecoder;
+/// use yaxpeax_x86::long_mode::InstructionFormatter;
+///
+/// let bytes = &[0x33, 0xc0];
+/// let inst = InstDecoder::default().decode_slice(bytes).expect("can decode");
+/// let mut formatter = InstructionFormatter::new();
+/// assert_eq!(
+///     formatter.format_inst(&inst).expect("can format"),
+///     "xor eax, eax"
+/// );
+///
+/// // or, getting the formatted instruction with `text_str`:
+/// assert_eq!(
+///     formatter.text_str(),
+///     "xor eax, eax"
+/// );
+/// ```
+pub struct InstructionFormatter {
     content: alloc::string::String,
 }
 
-// TODO: move this to an impl on a handle from BigEnoughString obtained through an `unsafe fn` that
-// clearly states requirements
-impl fmt::Write for BigEnoughString {
+impl InstructionFormatter {
+    /// create an `InstructionFormatter` with default settings. `InstructionFormatter`'s default
+    /// settings format instructions identically to their corresponding `fmt::Display`.
+    pub fn new() -> Self {
+        let mut buf = alloc::string::String::new();
+        // TODO: move 512 out to a MAX_INSTRUCTION_LEN const and appropriate justification (and
+        // fuzzing and ..)
+        buf.reserve(512);
+        Self {
+            content: buf,
+        }
+    }
+
+    /// format `inst` through this formatter, storing the formatted text in this formatter's
+    /// internal buffer. returns a borrow of that same internal buffer for convenience.
+    ///
+    /// this clears and reuses an internal buffer; if an instruction had been previously formatted
+    /// through this formatter, it will be overwritten.
+    pub fn format_inst<'formatter>(&'formatter mut self, inst: &Instruction) -> Result<&'formatter str, fmt::Error> {
+        let mut handle = self.write_handle();
+
+        inst.write_to(&mut handle)?;
+
+        Ok(self.text_str())
+    }
+
+    /// return a borrow of this formatter's buffer. if an instruction has been formatted, the
+    /// returned `&str` contains that formatted instruction's text.
+    pub fn text_str(&self) -> &str {
+        self.content.as_str()
+    }
+
+    fn write_handle(&mut self) -> InstructionTextSink {
+        self.content.clear();
+        InstructionTextSink {
+            buf: &mut self.content
+        }
+    }
+}
+
+/// this private struct is guaranteed to contain a string that is long enough to hold a
+/// fully-formatted x86 instruction.
+///
+/// this is wildly dangerous in general use, but because of the constrained lifecycle of
+/// `InstructionTextSink` in the context of `InstructionFormatter`, it's OK to use here. it is
+/// wildly dangerous because writing to this sink does not bounds check and assumes the contained
+/// `buf` is large enough for any input. as an example: if `buf` did not have enough space
+/// available from its current position, the `write_*` methods would write into whatever happens to
+/// be after `buf` in memory.
+///
+/// don't make this pub. if this is pub in docs, it's a bug.
+struct InstructionTextSink<'buf> {
+    buf: &'buf mut alloc::string::String
+}
+
+impl<'buf> fmt::Write for InstructionTextSink<'buf> {
     fn write_str(&mut self, s: &str) -> Result<(), core::fmt::Error> {
-        self.content.write_str(s)
+        self.buf.write_str(s)
     }
     fn write_char(&mut self, c: char) -> Result<(), core::fmt::Error> {
-        // SAFETY: TODO: goodness, what
+        // SAFETY: `buf` is assumed to be long enough to hold all input, `buf` at `underlying.len()`
+        // is valid for writing, but may be uninitialized.
+        //
+        // this function is essentially equivalent to `Vec::push` specialized for the case that
+        // `len < buf.capacity()`:
+        // https://github.com/rust-lang/rust/blob/be9e27e/library/alloc/src/vec/mod.rs#L1993-L2006
         unsafe {
-            let underlying = self.content.as_mut_vec();
-            underlying.as_mut_ptr().offset(underlying.len() as isize).write(c as u8);
+            let underlying = self.buf.as_mut_vec();
+            // `InstructionTextSink::write_char` is only used by yaxpeax-x86, and is only used to
+            // write single ASCII characters. this is wrong in the general case, but `write_char`
+            // here is not going to be used in the general case.
+            if cfg!(debug_asertions) {
+                panic!("InstructionTextSink::write_char would truncate output");
+            }
+            let to_push = c as u8;
+            // `ptr::write` here because `underlying.add(underlying.len())` may not point to an
+            // initialized value, which would mean that turning that pointer into a `&mut u8` to
+            // store through would be UB. `ptr::write` avoids taking the mut ref.
+            underlying.as_mut_ptr().offset(underlying.len() as isize).write(to_push);
+            // we have initialized all (one) bytes that `set_len` is increasing the length to
+            // include.
             underlying.set_len(underlying.len() + 1);
         }
         Ok(())
     }
 }
 
-// TODO: delete this whole thing? maybe?
+/// this DisplaySink impl exists to support somewhat more performant buffering of the kinds of
+/// strings `yaxpeax-x86` uses in formatting instructions.
 impl DisplaySink for alloc::string::String {
     #[inline(always)]
     fn write_fixed_size(&mut self, s: &str) -> Result<(), core::fmt::Error> {
@@ -508,18 +655,18 @@ impl DisplaySink for alloc::string::String {
         let new_bytes = s.as_bytes();
 
         if new_bytes.len() == 0 {
-            unsafe { core::hint::unreachable_unchecked() }
+            unsafe { unreachable_kinda_unchecked() }
         }
 
         if new_bytes.len() >= 16 {
-            unsafe { core::hint::unreachable_unchecked() }
+            unsafe { unreachable_kinda_unchecked() }
         }
 
         unsafe {
             let dest = buf.as_mut_ptr().offset(buf.len() as isize);
 
             // this used to be enough to bamboozle llvm away from
-            // https://github.com/rust-lang/rust/issues/92993#issuecomment-2028915232https://github.com/rust-lang/rust/issues/92993#issuecomment-2028915232
+            // https://github.com/rust-lang/rust/issues/92993#issuecomment-2028915232
             // if `s` is not fixed size. somewhere between Rust 1.68 and Rust 1.74 this stopped
             // being sufficient, so `write_fixed_size` truly should only be used for fixed size `s`
             // (otherwise this is a libc memcpy call in disguise). for fixed-size strings this
@@ -543,10 +690,6 @@ impl DisplaySink for alloc::string::String {
 
         // should get DCE
         if new_bytes.len() >= 32 {
-            unsafe { core::hint::unreachable_unchecked() }
-        }
-        // should get DCE
-        if new_bytes.len() == 0 {
             unsafe { core::hint::unreachable_unchecked() }
         }
 
@@ -625,10 +768,6 @@ impl DisplaySink for alloc::string::String {
         if new_bytes.len() >= 16 {
             unsafe { core::hint::unreachable_unchecked() }
         }
-        // should get DCE
-        if new_bytes.len() == 0 {
-            unsafe { core::hint::unreachable_unchecked() }
-        }
 
         unsafe {
             let dest = buf.as_mut_ptr().offset(buf.len() as isize);
@@ -694,10 +833,6 @@ impl DisplaySink for alloc::string::String {
 
         // should get DCE
         if new_bytes.len() >= 8 {
-            unsafe { core::hint::unreachable_unchecked() }
-        }
-        // should get DCE
-        if new_bytes.len() == 0 {
             unsafe { core::hint::unreachable_unchecked() }
         }
 
@@ -792,6 +927,7 @@ impl DisplaySink for alloc::string::String {
     /// this is provided for optimization opportunities when the formatted integer can be written
     /// directly to the sink (rather than formatted to an intermediate buffer and output as a
     /// followup step)
+    #[inline(always)]
     fn write_u16(&mut self, mut v: u16) -> Result<(), core::fmt::Error> {
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
@@ -823,7 +959,6 @@ impl DisplaySink for alloc::string::String {
         }
 
         Ok(())
-
     }
     /// write a u32 to the output as a base-16 integer.
     ///
@@ -901,22 +1036,22 @@ impl DisplaySink for alloc::string::String {
 
         Ok(())
     }
-    fn span_enter(&mut self, _ty: TokenType) {}
+    fn span_start(&mut self, _ty: TokenType) {}
     fn span_end(&mut self, _ty: TokenType) {}
 }
 
-impl DisplaySink for BigEnoughString {
+impl<'buf> DisplaySink for InstructionTextSink<'buf> {
     #[inline(always)]
     fn write_fixed_size(&mut self, s: &str) -> Result<(), core::fmt::Error> {
-        let buf = unsafe { self.content.as_mut_vec() };
+        let buf = unsafe { self.buf.as_mut_vec() };
         let new_bytes = s.as_bytes();
 
         if new_bytes.len() == 0 {
-            unsafe { core::hint::unreachable_unchecked() }
+            unsafe { unreachable_kinda_unchecked() }
         }
 
         if new_bytes.len() >= 16 {
-            unsafe { core::hint::unreachable_unchecked() }
+            unsafe { unreachable_kinda_unchecked() }
         }
 
         unsafe {
@@ -940,15 +1075,11 @@ impl DisplaySink for BigEnoughString {
     }
     unsafe fn write_lt_32(&mut self, s: &str) -> Result<(), fmt::Error> {
         // SAFETY: todo
-        let buf = unsafe { self.content.as_mut_vec() };
+        let buf = unsafe { self.buf.as_mut_vec() };
         let new_bytes = s.as_bytes();
 
         // should get DCE
         if new_bytes.len() >= 32 {
-            unsafe { core::hint::unreachable_unchecked() }
-        }
-        // should get DCE
-        if new_bytes.len() == 0 {
             unsafe { core::hint::unreachable_unchecked() }
         }
 
@@ -1018,15 +1149,11 @@ impl DisplaySink for BigEnoughString {
     }
     unsafe fn write_lt_16(&mut self, s: &str) -> Result<(), fmt::Error> {
         // SAFETY: todo
-        let buf = unsafe { self.content.as_mut_vec() };
+        let buf = unsafe { self.buf.as_mut_vec() };
         let new_bytes = s.as_bytes();
 
         // should get DCE
         if new_bytes.len() >= 16 {
-            unsafe { core::hint::unreachable_unchecked() }
-        }
-        // should get DCE
-        if new_bytes.len() == 0 {
             unsafe { core::hint::unreachable_unchecked() }
         }
 
@@ -1087,15 +1214,11 @@ impl DisplaySink for BigEnoughString {
     }
     unsafe fn write_lt_8(&mut self, s: &str) -> Result<(), fmt::Error> {
         // SAFETY: todo
-        let buf = unsafe { self.content.as_mut_vec() };
+        let buf = unsafe { self.buf.as_mut_vec() };
         let new_bytes = s.as_bytes();
 
         // should get DCE
         if new_bytes.len() >= 8 {
-            unsafe { core::hint::unreachable_unchecked() }
-        }
-        // should get DCE
-        if new_bytes.len() == 0 {
             unsafe { core::hint::unreachable_unchecked() }
         }
 
@@ -1161,7 +1284,7 @@ impl DisplaySink for BigEnoughString {
             printed_size = 1;
         }
 
-        let buf = unsafe { self.content.as_mut_vec() };
+        let buf = unsafe { self.buf.as_mut_vec() };
         let p = unsafe { buf.as_mut_ptr().offset(buf.len() as isize) };
         let mut curr = printed_size;
         loop {
@@ -1188,6 +1311,7 @@ impl DisplaySink for BigEnoughString {
     /// this is provided for optimization opportunities when the formatted integer can be written
     /// directly to the sink (rather than formatted to an intermediate buffer and output as a
     /// followup step)
+    #[inline(always)]
     fn write_u16(&mut self, mut v: u16) -> Result<(), core::fmt::Error> {
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
@@ -1196,7 +1320,7 @@ impl DisplaySink for BigEnoughString {
             printed_size = 1;
         }
 
-        let buf = unsafe { self.content.as_mut_vec() };
+        let buf = unsafe { self.buf.as_mut_vec() };
         let p = unsafe { buf.as_mut_ptr().offset(buf.len() as isize) };
         let mut curr = printed_size;
         loop {
@@ -1232,7 +1356,7 @@ impl DisplaySink for BigEnoughString {
             printed_size = 1;
         }
 
-        let buf = unsafe { self.content.as_mut_vec() };
+        let buf = unsafe { self.buf.as_mut_vec() };
         let p = unsafe { buf.as_mut_ptr().offset(buf.len() as isize) };
         let mut curr = printed_size;
         loop {
@@ -1268,7 +1392,7 @@ impl DisplaySink for BigEnoughString {
             printed_size = 1;
         }
 
-        let buf = unsafe { self.content.as_mut_vec() };
+        let buf = unsafe { self.buf.as_mut_vec() };
         let p = unsafe { buf.as_mut_ptr().offset(buf.len() as isize) };
         let mut curr = printed_size;
         loop {
@@ -1288,35 +1412,8 @@ impl DisplaySink for BigEnoughString {
 
         Ok(())
     }
-    fn span_enter(&mut self, _ty: TokenType) {}
+    fn span_start(&mut self, _ty: TokenType) {}
     fn span_end(&mut self, _ty: TokenType) {}
-}
-
-impl BigEnoughString {
-    pub fn clear(&mut self) {
-        self.content.clear();
-    }
-
-    pub fn into_inner(self) -> alloc::string::String {
-        self.content
-    }
-
-    pub fn from_string(mut s: alloc::string::String) -> Self {
-        s.reserve(256);
-        // safety: the string is large enough
-        unsafe { Self::from_string_unchecked(s) }
-    }
-
-    pub fn new() -> Self {
-        Self::from_string(alloc::string::String::new())
-    }
-
-    /// safety: CALLER MUST ENSURE S IS LARGE ENOUGH TO HOLD ANY DISASSEMBLED x86 INSTRUCTION
-    unsafe fn from_string_unchecked(s: alloc::string::String) -> Self {
-        Self {
-            content: s
-        }
-    }
 }
 
 struct ColorizingOperandVisitor<'a, T> {
@@ -1329,7 +1426,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
 
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_u8(&mut self, imm: u8) -> Result<Self::Ok, Self::Error> {
-        self.f.span_enter(TokenType::Immediate);
+        self.f.span_start(TokenType::Immediate);
         self.f.write_fixed_size("0x")?;
         self.f.write_u8(imm)?;
         self.f.span_end(TokenType::Immediate);
@@ -1337,7 +1434,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
     }
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_i8(&mut self, imm: i8) -> Result<Self::Ok, Self::Error> {
-        self.f.span_enter(TokenType::Immediate);
+        self.f.span_start(TokenType::Immediate);
         let mut v = imm as u8;
         if imm < 0 {
             self.f.write_char('-')?;
@@ -1350,7 +1447,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
     }
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_u16(&mut self, imm: u16) -> Result<Self::Ok, Self::Error> {
-        self.f.span_enter(TokenType::Immediate);
+        self.f.span_start(TokenType::Immediate);
         self.f.write_fixed_size("0x")?;
         self.f.write_u16(imm)?;
         self.f.span_end(TokenType::Immediate);
@@ -1358,7 +1455,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
     }
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_i16(&mut self, imm: i16) -> Result<Self::Ok, Self::Error> {
-        self.f.span_enter(TokenType::Immediate);
+        self.f.span_start(TokenType::Immediate);
         let mut v = imm as u16;
         if imm < 0 {
             self.f.write_char('-')?;
@@ -1371,14 +1468,14 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
     }
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
-        self.f.span_enter(TokenType::Immediate);
+        self.f.span_start(TokenType::Immediate);
         self.f.write_fixed_size("0x")?;
         self.f.write_u32(imm)?;
         self.f.span_end(TokenType::Immediate);
         Ok(())
     }
     fn visit_i32(&mut self, imm: i32) -> Result<Self::Ok, Self::Error> {
-        self.f.span_enter(TokenType::Immediate);
+        self.f.span_start(TokenType::Immediate);
         let mut v = imm as u32;
         if imm < 0 {
             self.f.write_char('-')?;
@@ -1391,7 +1488,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
     }
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_u64(&mut self, imm: u64) -> Result<Self::Ok, Self::Error> {
-        self.f.span_enter(TokenType::Immediate);
+        self.f.span_start(TokenType::Immediate);
         self.f.write_fixed_size("0x")?;
         self.f.write_u64(imm)?;
         self.f.span_end(TokenType::Immediate);
@@ -1399,7 +1496,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
     }
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_i64(&mut self, imm: i64) -> Result<Self::Ok, Self::Error> {
-        self.f.span_enter(TokenType::Immediate);
+        self.f.span_start(TokenType::Immediate);
         let mut v = imm as u64;
         if imm < 0 {
             self.f.write_char('-')?;
@@ -1412,18 +1509,18 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
     }
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_reg(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
-        self.f.span_enter(TokenType::Register);
+        self.f.span_start(TokenType::Register);
         unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
         self.f.span_end(TokenType::Register);
         Ok(())
     }
     fn visit_reg_mask_merge(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
-        self.f.span_enter(TokenType::Register);
+        self.f.span_start(TokenType::Register);
         unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
         self.f.span_end(TokenType::Register);
         if mask.num != 0 {
             self.f.write_fixed_size("{")?;
-            self.f.span_enter(TokenType::Register);
+            self.f.span_start(TokenType::Register);
             unsafe { self.f.write_lt_8(regspec_label(&mask))?; }
             self.f.span_end(TokenType::Register);
             self.f.write_fixed_size("}")?;
