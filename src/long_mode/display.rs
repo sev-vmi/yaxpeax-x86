@@ -893,31 +893,32 @@ impl DisplaySink for alloc::string::String {
     fn write_u8(&mut self, mut v: u8) -> Result<(), core::fmt::Error> {
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
-        let mut printed_size = ((8 - v.leading_zeros() + 3) >> 2) as usize;
+        let printed_size = ((8 - v.leading_zeros() + 3) >> 2) as usize;
         if printed_size == 0 {
-            printed_size = 1;
+            return self.write_fixed_size("0");
         }
 
         self.reserve(printed_size);
 
         let buf = unsafe { self.as_mut_vec() };
-        let p = unsafe { buf.as_mut_ptr().offset(buf.len() as isize) };
-        let mut curr = printed_size;
+        let new_len = buf.len() + printed_size;
+
+        unsafe {
+            buf.set_len(new_len);
+        }
+        let mut p = unsafe { buf.as_mut_ptr().offset(new_len as isize) };
+
         loop {
             let digit = v % 16;
             let c = c_to_hex(digit as u8);
-            curr -= 1;
             unsafe {
-                p.offset(curr as isize).write(c);
+                p = p.offset(-1);
+                p.write(c);
             }
             v = v / 16;
             if v == 0 {
                 break;
             }
-        }
-
-        unsafe {
-            buf.set_len(buf.len() + printed_size);
         }
 
         Ok(())
@@ -931,31 +932,32 @@ impl DisplaySink for alloc::string::String {
     fn write_u16(&mut self, mut v: u16) -> Result<(), core::fmt::Error> {
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
-        let mut printed_size = ((16 - v.leading_zeros() + 3) >> 2) as usize;
+        let printed_size = ((16 - v.leading_zeros() + 3) >> 2) as usize;
         if printed_size == 0 {
-            printed_size = 1;
+            return self.write_fixed_size("0");
         }
 
         self.reserve(printed_size);
 
         let buf = unsafe { self.as_mut_vec() };
-        let p = unsafe { buf.as_mut_ptr().offset(buf.len() as isize) };
-        let mut curr = printed_size;
+        let new_len = buf.len() + printed_size;
+
+        unsafe {
+            buf.set_len(new_len);
+        }
+        let mut p = unsafe { buf.as_mut_ptr().offset(new_len as isize) };
+
         loop {
             let digit = v % 16;
             let c = c_to_hex(digit as u8);
-            curr -= 1;
             unsafe {
-                p.offset(curr as isize).write(c);
+                p = p.offset(-1);
+                p.write(c);
             }
             v = v / 16;
             if v == 0 {
                 break;
             }
-        }
-
-        unsafe {
-            buf.set_len(buf.len() + printed_size);
         }
 
         Ok(())
@@ -969,31 +971,32 @@ impl DisplaySink for alloc::string::String {
     fn write_u32(&mut self, mut v: u32) -> Result<(), core::fmt::Error> {
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
-        let mut printed_size = ((32 - v.leading_zeros() + 3) >> 2) as usize;
+        let printed_size = ((32 - v.leading_zeros() + 3) >> 2) as usize;
         if printed_size == 0 {
-            printed_size = 1;
+            return self.write_fixed_size("0");
         }
 
         self.reserve(printed_size);
 
         let buf = unsafe { self.as_mut_vec() };
-        let p = unsafe { buf.as_mut_ptr().offset(buf.len() as isize) };
-        let mut curr = printed_size;
+        let new_len = buf.len() + printed_size;
+
+        unsafe {
+            buf.set_len(new_len);
+        }
+        let mut p = unsafe { buf.as_mut_ptr().offset(new_len as isize) };
+
         loop {
             let digit = v % 16;
             let c = c_to_hex(digit as u8);
-            curr -= 1;
             unsafe {
-                p.offset(curr as isize).write(c);
+                p = p.offset(-1);
+                p.write(c);
             }
             v = v / 16;
             if v == 0 {
                 break;
             }
-        }
-
-        unsafe {
-            buf.set_len(buf.len() + printed_size);
         }
 
         Ok(())
@@ -1007,31 +1010,32 @@ impl DisplaySink for alloc::string::String {
     fn write_u64(&mut self, mut v: u64) -> Result<(), core::fmt::Error> {
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
-        let mut printed_size = ((64 - v.leading_zeros() + 3) >> 2) as usize;
+        let printed_size = ((64 - v.leading_zeros() + 3) >> 2) as usize;
         if printed_size == 0 {
-            printed_size = 1;
+            return self.write_fixed_size("0");
         }
 
         self.reserve(printed_size);
 
         let buf = unsafe { self.as_mut_vec() };
-        let p = unsafe { buf.as_mut_ptr().offset(buf.len() as isize) };
-        let mut curr = printed_size;
+        let new_len = buf.len() + printed_size;
+
+        unsafe {
+            buf.set_len(new_len);
+        }
+        let mut p = unsafe { buf.as_mut_ptr().offset(new_len as isize) };
+
         loop {
             let digit = v % 16;
             let c = c_to_hex(digit as u8);
-            curr -= 1;
             unsafe {
-                p.offset(curr as isize).write(c);
+                p = p.offset(-1);
+                p.write(c);
             }
             v = v / 16;
             if v == 0 {
                 break;
             }
-        }
-
-        unsafe {
-            buf.set_len(buf.len() + printed_size);
         }
 
         Ok(())
@@ -1047,7 +1051,7 @@ impl<'buf> DisplaySink for InstructionTextSink<'buf> {
         let new_bytes = s.as_bytes();
 
         if new_bytes.len() == 0 {
-            unsafe { unreachable_kinda_unchecked() }
+            return Ok(());
         }
 
         if new_bytes.len() >= 16 {
@@ -1279,29 +1283,30 @@ impl<'buf> DisplaySink for InstructionTextSink<'buf> {
     fn write_u8(&mut self, mut v: u8) -> Result<(), core::fmt::Error> {
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
-        let mut printed_size = ((8 - v.leading_zeros() + 3) >> 2) as usize;
+        let printed_size = ((8 - v.leading_zeros() + 3) >> 2) as usize;
         if printed_size == 0 {
-            printed_size = 1;
+            return self.write_fixed_size("0");
         }
 
         let buf = unsafe { self.buf.as_mut_vec() };
-        let p = unsafe { buf.as_mut_ptr().offset(buf.len() as isize) };
-        let mut curr = printed_size;
+        let new_len = buf.len() + printed_size;
+
+        unsafe {
+            buf.set_len(new_len);
+        }
+        let mut p = unsafe { buf.as_mut_ptr().offset(new_len as isize) };
+
         loop {
             let digit = v % 16;
             let c = c_to_hex(digit as u8);
-            curr -= 1;
             unsafe {
-                p.offset(curr as isize).write(c);
+                p = p.offset(-1);
+                p.write(c);
             }
             v = v / 16;
             if v == 0 {
                 break;
             }
-        }
-
-        unsafe {
-            buf.set_len(buf.len() + printed_size);
         }
 
         Ok(())
@@ -1315,29 +1320,30 @@ impl<'buf> DisplaySink for InstructionTextSink<'buf> {
     fn write_u16(&mut self, mut v: u16) -> Result<(), core::fmt::Error> {
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
-        let mut printed_size = ((16 - v.leading_zeros() + 3) >> 2) as usize;
+        let printed_size = ((16 - v.leading_zeros() + 3) >> 2) as usize;
         if printed_size == 0 {
-            printed_size = 1;
+            return self.write_fixed_size("0");
         }
 
         let buf = unsafe { self.buf.as_mut_vec() };
-        let p = unsafe { buf.as_mut_ptr().offset(buf.len() as isize) };
-        let mut curr = printed_size;
+        let new_len = buf.len() + printed_size;
+
+        unsafe {
+            buf.set_len(new_len);
+        }
+        let mut p = unsafe { buf.as_mut_ptr().offset(new_len as isize) };
+
         loop {
             let digit = v % 16;
             let c = c_to_hex(digit as u8);
-            curr -= 1;
             unsafe {
-                p.offset(curr as isize).write(c);
+                p = p.offset(-1);
+                p.write(c);
             }
             v = v / 16;
             if v == 0 {
                 break;
             }
-        }
-
-        unsafe {
-            buf.set_len(buf.len() + printed_size);
         }
 
         Ok(())
@@ -1351,29 +1357,30 @@ impl<'buf> DisplaySink for InstructionTextSink<'buf> {
     fn write_u32(&mut self, mut v: u32) -> Result<(), core::fmt::Error> {
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
-        let mut printed_size = ((32 - v.leading_zeros() + 3) >> 2) as usize;
+        let printed_size = ((32 - v.leading_zeros() + 3) >> 2) as usize;
         if printed_size == 0 {
-            printed_size = 1;
+            return self.write_fixed_size("0");
         }
 
         let buf = unsafe { self.buf.as_mut_vec() };
-        let p = unsafe { buf.as_mut_ptr().offset(buf.len() as isize) };
-        let mut curr = printed_size;
+        let new_len = buf.len() + printed_size;
+
+        unsafe {
+            buf.set_len(new_len);
+        }
+        let mut p = unsafe { buf.as_mut_ptr().offset(new_len as isize) };
+
         loop {
             let digit = v % 16;
             let c = c_to_hex(digit as u8);
-            curr -= 1;
             unsafe {
-                p.offset(curr as isize).write(c);
+                p = p.offset(-1);
+                p.write(c);
             }
             v = v / 16;
             if v == 0 {
                 break;
             }
-        }
-
-        unsafe {
-            buf.set_len(buf.len() + printed_size);
         }
 
         Ok(())
@@ -1387,28 +1394,31 @@ impl<'buf> DisplaySink for InstructionTextSink<'buf> {
     fn write_u64(&mut self, mut v: u64) -> Result<(), core::fmt::Error> {
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
-        let mut printed_size = ((64 - v.leading_zeros() + 3) >> 2) as usize;
+        let printed_size = ((64 - v.leading_zeros() + 3) >> 2) as usize;
         if printed_size == 0 {
-            printed_size = 1;
+            return self.write_fixed_size("0");
         }
 
         let buf = unsafe { self.buf.as_mut_vec() };
-        let p = unsafe { buf.as_mut_ptr().offset(buf.len() as isize) };
-        let mut curr = printed_size;
+        let new_len = buf.len() + printed_size;
+
+        unsafe {
+            buf.set_len(new_len);
+        }
+        let mut p = unsafe { buf.as_mut_ptr().offset(new_len as isize) };
+
         loop {
             let digit = v % 16;
             let c = c_to_hex(digit as u8);
-            curr -= 1;
             unsafe {
-                p.offset(curr as isize).write(c);
+                p = p.offset(-1);
+                p.write(c);
             }
             v = v / 16;
             if v == 0 {
                 break;
             }
         }
-
-        unsafe { buf.set_len(buf.len() + printed_size); }
 
         Ok(())
     }
