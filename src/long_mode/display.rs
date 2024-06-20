@@ -891,12 +891,12 @@ impl DisplaySink for alloc::string::String {
     /// followup step)
     #[inline(always)]
     fn write_u8(&mut self, mut v: u8) -> Result<(), core::fmt::Error> {
+        if v == 0 {
+            return self.write_fixed_size("0");
+        }
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
         let printed_size = ((8 - v.leading_zeros() + 3) >> 2) as usize;
-        if printed_size == 0 {
-            return self.write_fixed_size("0");
-        }
 
         self.reserve(printed_size);
 
@@ -930,12 +930,12 @@ impl DisplaySink for alloc::string::String {
     /// followup step)
     #[inline(always)]
     fn write_u16(&mut self, mut v: u16) -> Result<(), core::fmt::Error> {
+        if v == 0 {
+            return self.write_fixed_size("0");
+        }
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
         let printed_size = ((16 - v.leading_zeros() + 3) >> 2) as usize;
-        if printed_size == 0 {
-            return self.write_fixed_size("0");
-        }
 
         self.reserve(printed_size);
 
@@ -969,12 +969,12 @@ impl DisplaySink for alloc::string::String {
     /// followup step)
     #[inline(always)]
     fn write_u32(&mut self, mut v: u32) -> Result<(), core::fmt::Error> {
+        if v == 0 {
+            return self.write_fixed_size("0");
+        }
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
         let printed_size = ((32 - v.leading_zeros() + 3) >> 2) as usize;
-        if printed_size == 0 {
-            return self.write_fixed_size("0");
-        }
 
         self.reserve(printed_size);
 
@@ -1008,12 +1008,12 @@ impl DisplaySink for alloc::string::String {
     /// followup step)
     #[inline(always)]
     fn write_u64(&mut self, mut v: u64) -> Result<(), core::fmt::Error> {
+        if v == 0 {
+            return self.write_fixed_size("0");
+        }
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
         let printed_size = ((64 - v.leading_zeros() + 3) >> 2) as usize;
-        if printed_size == 0 {
-            return self.write_fixed_size("0");
-        }
 
         self.reserve(printed_size);
 
@@ -1281,12 +1281,12 @@ impl<'buf> DisplaySink for InstructionTextSink<'buf> {
     /// followup step)
     #[inline(always)]
     fn write_u8(&mut self, mut v: u8) -> Result<(), core::fmt::Error> {
+        if v == 0 {
+            return self.write_fixed_size("0");
+        }
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
         let printed_size = ((8 - v.leading_zeros() + 3) >> 2) as usize;
-        if printed_size == 0 {
-            return self.write_fixed_size("0");
-        }
 
         let buf = unsafe { self.buf.as_mut_vec() };
         let new_len = buf.len() + printed_size;
@@ -1318,12 +1318,12 @@ impl<'buf> DisplaySink for InstructionTextSink<'buf> {
     /// followup step)
     #[inline(always)]
     fn write_u16(&mut self, mut v: u16) -> Result<(), core::fmt::Error> {
+        if v == 0 {
+            return self.write_fixed_size("0");
+        }
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
         let printed_size = ((16 - v.leading_zeros() + 3) >> 2) as usize;
-        if printed_size == 0 {
-            return self.write_fixed_size("0");
-        }
 
         let buf = unsafe { self.buf.as_mut_vec() };
         let new_len = buf.len() + printed_size;
@@ -1355,12 +1355,12 @@ impl<'buf> DisplaySink for InstructionTextSink<'buf> {
     /// followup step)
     #[inline(always)]
     fn write_u32(&mut self, mut v: u32) -> Result<(), core::fmt::Error> {
+        if v == 0 {
+            return self.write_fixed_size("0");
+        }
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
         let printed_size = ((32 - v.leading_zeros() + 3) >> 2) as usize;
-        if printed_size == 0 {
-            return self.write_fixed_size("0");
-        }
 
         let buf = unsafe { self.buf.as_mut_vec() };
         let new_len = buf.len() + printed_size;
@@ -1392,12 +1392,12 @@ impl<'buf> DisplaySink for InstructionTextSink<'buf> {
     /// followup step)
     #[inline(always)]
     fn write_u64(&mut self, mut v: u64) -> Result<(), core::fmt::Error> {
+        if v == 0 {
+            return self.write_fixed_size("0");
+        }
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
         let printed_size = ((64 - v.leading_zeros() + 3) >> 2) as usize;
-        if printed_size == 0 {
-            return self.write_fixed_size("0");
-        }
 
         let buf = unsafe { self.buf.as_mut_vec() };
         let new_len = buf.len() + printed_size;
