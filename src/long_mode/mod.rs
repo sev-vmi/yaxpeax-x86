@@ -8,8 +8,6 @@ pub use crate::MemoryAccessSize;
 
 #[cfg(feature = "fmt")]
 pub use self::display::{DisplayStyle, InstructionDisplayer};
-#[cfg(feature = "fmt")]
-pub use self::display::{InstructionFormatter, NoColorsSink, DisplaySink, TokenType};
 
 use core::cmp::PartialEq;
 use crate::safer_unchecked::unreachable_kinda_unchecked as unreachable_unchecked;
