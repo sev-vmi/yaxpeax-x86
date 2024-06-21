@@ -4303,6 +4303,7 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::St
     }
 }
 
+// TODO: should include CALL
 static RELATIVE_BRANCHES: [Opcode; 21] = [
     Opcode::JMP, Opcode::JRCXZ,
     Opcode::LOOP, Opcode::LOOPZ, Opcode::LOOPNZ,
@@ -4474,12 +4475,13 @@ impl<'a, F: DisplaySink> crate::long_mode::OperandVisitor for RelativeBranchPrin
 /// ```
 /// use yaxpeax_x86::long_mode::InstDecoder;
 /// use yaxpeax_x86::long_mode::InstructionTextBuffer;
+/// use yaxpeax_x86::long_mode::DisplayStyle;
 ///
 /// let bytes = &[0x33, 0xc0];
 /// let inst = InstDecoder::default().decode_slice(bytes).expect("can decode");
 /// let mut text_buf = InstructionTextBuffer::new();
 /// assert_eq!(
-///     text_buf.format_inst(&inst).expect("can format"),
+///     text_buf.format_inst(&inst.display_with(DisplayStyle::Intel)).expect("can format"),
 ///     "xor eax, eax"
 /// );
 ///
@@ -4511,7 +4513,9 @@ impl InstructionTextBuffer {
     /// this clears and reuses an internal buffer; if an instruction had been previously formatted
     /// through this buffer, it will be overwritten.
     pub fn format_inst<'buf, 'instr>(&'buf mut self, display: &InstructionDisplayer<'instr>) -> Result<&'buf str, fmt::Error> {
-        let mut handle = self.write_handle();
+        // Safety: this sink is used to format exactly one instruction and then dropped. it can
+        // never escape `format_inst`.
+        let mut handle = unsafe { self.write_handle() };
 
         match display.style {
             DisplayStyle::Intel => {
@@ -4531,8 +4535,15 @@ impl InstructionTextBuffer {
         self.content.as_str()
     }
 
-    fn write_handle(&mut self) -> crate::display::InstructionTextSink {
+    /// do the necessary bookkeeping and provide an `InstructionTextSink` to write an instruction
+    /// into.
+    ///
+    /// SAFETY: callers must print at most one instruction into this handle.
+    unsafe fn write_handle(&mut self) -> crate::display::InstructionTextSink {
         self.content.clear();
+        // Safety: `content` was just cleared, so writing begins at the start of the buffer.
+        // `content`is large enough to hold a fully-formatted instruction (see
+        // `InstructionTextBuffer::new`).
         crate::display::InstructionTextSink::new(&mut self.content)
     }
 }

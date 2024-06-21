@@ -211,6 +211,11 @@ impl<'buf> fmt::Write for InstructionTextSink<'buf> {
         self.buf.write_str(s)
     }
     fn write_char(&mut self, c: char) -> Result<(), core::fmt::Error> {
+        if cfg!(debug_assertions) {
+            if self.buf.capacity() < self.buf.len() + 1 {
+                panic!("InstructionTextSink::write_char would overflow output");
+            }
+        }
         // SAFETY: `buf` is assumed to be long enough to hold all input, `buf` at `underlying.len()`
         // is valid for writing, but may be uninitialized.
         //
@@ -640,6 +645,12 @@ impl DisplaySink for alloc::string::String {
 impl<'buf> DisplaySink for InstructionTextSink<'buf> {
     #[inline(always)]
     fn write_fixed_size(&mut self, s: &str) -> Result<(), core::fmt::Error> {
+        if cfg!(debug_assertions) {
+            if self.buf.capacity() < self.buf.len() + s.len() {
+                panic!("InstructionTextSink::write_fixed_size would overflow output");
+            }
+        }
+
         let buf = unsafe { self.buf.as_mut_vec() };
         let new_bytes = s.as_bytes();
 
@@ -671,6 +682,12 @@ impl<'buf> DisplaySink for InstructionTextSink<'buf> {
         Ok(())
     }
     unsafe fn write_lt_32(&mut self, s: &str) -> Result<(), fmt::Error> {
+        if cfg!(debug_assertions) {
+            if self.buf.capacity() < self.buf.len() + s.len() {
+                panic!("InstructionTextSink::write_lt_32 would overflow output");
+            }
+        }
+
         // SAFETY: todo
         let buf = unsafe { self.buf.as_mut_vec() };
         let new_bytes = s.as_bytes();
@@ -745,6 +762,12 @@ impl<'buf> DisplaySink for InstructionTextSink<'buf> {
         Ok(())
     }
     unsafe fn write_lt_16(&mut self, s: &str) -> Result<(), fmt::Error> {
+        if cfg!(debug_assertions) {
+            if self.buf.capacity() < self.buf.len() + s.len() {
+                panic!("InstructionTextSink::write_lt_16 would overflow output");
+            }
+        }
+
         // SAFETY: todo
         let buf = unsafe { self.buf.as_mut_vec() };
         let new_bytes = s.as_bytes();
@@ -810,6 +833,12 @@ impl<'buf> DisplaySink for InstructionTextSink<'buf> {
         Ok(())
     }
     unsafe fn write_lt_8(&mut self, s: &str) -> Result<(), fmt::Error> {
+        if cfg!(debug_assertions) {
+            if self.buf.capacity() < self.buf.len() + s.len() {
+                panic!("InstructionTextSink::write_lt_8 would overflow output");
+            }
+        }
+
         // SAFETY: todo
         let buf = unsafe { self.buf.as_mut_vec() };
         let new_bytes = s.as_bytes();
@@ -881,6 +910,12 @@ impl<'buf> DisplaySink for InstructionTextSink<'buf> {
         // means we can write directly into the correct offsets of the output string.
         let printed_size = ((8 - v.leading_zeros() + 3) >> 2) as usize;
 
+        if cfg!(debug_assertions) {
+            if self.buf.capacity() < self.buf.len() + printed_size {
+                panic!("InstructionTextSink::write_u8 would overflow output");
+            }
+        }
+
         let buf = unsafe { self.buf.as_mut_vec() };
         let new_len = buf.len() + printed_size;
 
@@ -914,9 +949,16 @@ impl<'buf> DisplaySink for InstructionTextSink<'buf> {
         if v == 0 {
             return self.write_fixed_size("0");
         }
+
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
         let printed_size = ((16 - v.leading_zeros() + 3) >> 2) as usize;
+
+        if cfg!(debug_assertions) {
+            if self.buf.capacity() < self.buf.len() + printed_size {
+                panic!("InstructionTextSink::write_u16 would overflow output");
+            }
+        }
 
         let buf = unsafe { self.buf.as_mut_vec() };
         let new_len = buf.len() + printed_size;
@@ -951,9 +993,16 @@ impl<'buf> DisplaySink for InstructionTextSink<'buf> {
         if v == 0 {
             return self.write_fixed_size("0");
         }
+
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
         let printed_size = ((32 - v.leading_zeros() + 3) >> 2) as usize;
+
+        if cfg!(debug_assertions) {
+            if self.buf.capacity() < self.buf.len() + printed_size {
+                panic!("InstructionTextSink::write_u32 would overflow output");
+            }
+        }
 
         let buf = unsafe { self.buf.as_mut_vec() };
         let new_len = buf.len() + printed_size;
@@ -988,9 +1037,16 @@ impl<'buf> DisplaySink for InstructionTextSink<'buf> {
         if v == 0 {
             return self.write_fixed_size("0");
         }
+
         // we can fairly easily predict the size of a formatted string here with lzcnt, which also
         // means we can write directly into the correct offsets of the output string.
         let printed_size = ((64 - v.leading_zeros() + 3) >> 2) as usize;
+
+        if cfg!(debug_assertions) {
+            if self.buf.capacity() < self.buf.len() + printed_size {
+                panic!("InstructionTextSink::write_u64 would overflow output");
+            }
+        }
 
         let buf = unsafe { self.buf.as_mut_vec() };
         let new_len = buf.len() + printed_size;

@@ -79,7 +79,7 @@ fn test_display_under(decoder: &InstDecoder, data: &[u8], expected: &'static str
                     );
 
                     let mut text2 = String::new();
-                    let mut out = yaxpeax_x86::long_mode::NoColorsSink {
+                    let mut out = yaxpeax_x86::display::NoColorsSink {
                         out: &mut text2,
                     };
                     instr.write_to(&mut out).expect("printing succeeds");
@@ -94,12 +94,12 @@ fn test_display_under(decoder: &InstDecoder, data: &[u8], expected: &'static str
                         text,
                     );
 
-                    let mut formatter = yaxpeax_x86::long_mode::InstructionFormatter::new();
-                    let text3 = formatter.format_inst(&instr).expect("printing succeeds");
+                    let mut formatter = yaxpeax_x86::long_mode::InstructionTextBuffer::new();
+                    let text3 = formatter.format_inst(&instr.display_with(yaxpeax_x86::long_mode::DisplayStyle::Intel)).expect("printing succeeds");
 
                     assert!(
                         text3 == text,
-                        "display error through InstructionFormatter for {}:\n  decoded: {:?} under decoder {}\n displayed: {}\n expected: {}\n",
+                        "display error through InstructionTextBuffer for {}:\n  decoded: {:?} under decoder {}\n displayed: {}\n expected: {}\n",
                         hex,
                         instr,
                         decoder,
