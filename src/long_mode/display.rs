@@ -1,14 +1,12 @@
 use core::fmt;
 
 use yaxpeax_arch::{Colorize, ShowContextual, NoColors, YaxColors};
-use yaxpeax_arch::display::*;
 
 use crate::safer_unchecked::GetSaferUnchecked as _;
 use crate::MEM_SIZE_STRINGS;
 use crate::long_mode::{RegSpec, Opcode, Operand, MergeMode, InstDecoder, Instruction, Segment, PrefixRex, OperandSpec};
 
-use crate::display::DisplaySink;
-use crate::display::TokenType;
+use yaxpeax_arch::display::DisplaySink;
 
 impl fmt::Display for InstDecoder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -166,202 +164,13 @@ impl fmt::Display for Operand {
 
 impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for Operand {
     fn colorize(&self, colors: &Y, f: &mut T) -> fmt::Result {
-        match self {
-            &Operand::ImmediateU8(imm) => {
-                write!(f, "{}", colors.number(u8_hex(imm)))
-            }
-            &Operand::ImmediateI8(imm) => {
-                write!(f, "{}",
-                    colors.number(signed_i8_hex(imm)))
-            },
-            &Operand::ImmediateU16(imm) => {
-                write!(f, "{}", colors.number(u16_hex(imm)))
-            }
-            &Operand::ImmediateI16(imm) => {
-                write!(f, "{}",
-                    colors.number(signed_i16_hex(imm)))
-            },
-            &Operand::ImmediateU32(imm) => {
-                write!(f, "{}", colors.number(u32_hex(imm)))
-            }
-            &Operand::ImmediateI32(imm) => {
-                write!(f, "{}",
-                    colors.number(signed_i32_hex(imm)))
-            },
-            &Operand::ImmediateU64(imm) => {
-                write!(f, "{}", colors.number(u64_hex(imm)))
-            }
-            &Operand::ImmediateI64(imm) => {
-                write!(f, "{}",
-                    colors.number(signed_i64_hex(imm)))
-            },
-            &Operand::Register(ref spec) => {
-                f.write_str(regspec_label(spec))
-            }
-            &Operand::RegisterMaskMerge(ref spec, ref mask, merge_mode) => {
-                f.write_str(regspec_label(spec))?;
-                if mask.num != 0 {
-                    f.write_str("{")?;
-                    f.write_str(regspec_label(mask))?;
-                    f.write_str("}")?;
-                }
-                if let MergeMode::Zero = merge_mode {
-                    f.write_str("{z}")?;
-                }
-                Ok(())
-            }
-            &Operand::RegisterMaskMergeSae(ref spec, ref mask, merge_mode, sae_mode) => {
-                f.write_str(regspec_label(spec))?;
-                if mask.num != 0 {
-                    f.write_str("{")?;
-                    f.write_str(regspec_label(mask))?;
-                    f.write_str("}")?;
-                }
-                if let MergeMode::Zero = merge_mode {
-                    f.write_str("{z}")?;
-                }
-                f.write_str(sae_mode.label())?;
-                Ok(())
-            }
-            &Operand::RegisterMaskMergeSaeNoround(ref spec, ref mask, merge_mode) => {
-                f.write_str(regspec_label(spec))?;
-                if mask.num != 0 {
-                    f.write_str("{")?;
-                    f.write_str(regspec_label(mask))?;
-                    f.write_str("}")?;
-                }
-                if let MergeMode::Zero = merge_mode {
-                    f.write_str("{z}")?;
-                }
-                f.write_str("{sae}")?;
-                Ok(())
-            }
-            &Operand::DisplacementU32(imm) => {
-                write!(f, "[{}]", colors.address(u32_hex(imm)))
-            }
-            &Operand::DisplacementU64(imm) => {
-                write!(f, "[{}]", colors.address(u64_hex(imm)))
-            }
-            &Operand::RegDisp(ref spec, disp) => {
-                write!(f, "[{} ", regspec_label(spec))?;
-                format_number_i32(colors, f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-                write!(f, "]")
-            },
-            &Operand::RegDeref(ref spec) => {
-                f.write_str("[")?;
-                f.write_str(regspec_label(spec))?;
-                f.write_str("]")
-            },
-            &Operand::RegScale(ref spec, scale) => {
-                write!(f, "[{} * {}]",
-                    regspec_label(spec),
-                    colors.number(scale)
-                )
-            },
-            &Operand::RegScaleDisp(ref spec, scale, disp) => {
-                write!(f, "[{} * {} ",
-                    regspec_label(spec),
-                    colors.number(scale),
-                )?;
-                format_number_i32(colors, f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-                write!(f, "]")
-            },
-            &Operand::RegIndexBase(ref base, ref index) => {
-                f.write_str("[")?;
-                f.write_str(regspec_label(base))?;
-                f.write_str(" + ")?;
-                f.write_str(regspec_label(index))?;
-                f.write_str("]")
-            }
-            &Operand::RegIndexBaseDisp(ref base, ref index, disp) => {
-                write!(f, "[{} + {} ",
-                    regspec_label(base),
-                    regspec_label(index),
-                )?;
-                format_number_i32(colors, f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-                write!(f, "]")
-            },
-            &Operand::RegIndexBaseScale(ref base, ref index, scale) => {
-                write!(f, "[{} + {} * {}]",
-                    regspec_label(base),
-                    regspec_label(index),
-                    colors.number(scale)
-                )
-            }
-            &Operand::RegIndexBaseScaleDisp(ref base, ref index, scale, disp) => {
-                write!(f, "[{} + {} * {} ",
-                    regspec_label(base),
-                    regspec_label(index),
-                    colors.number(scale),
-                )?;
-                format_number_i32(colors, f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-                write!(f, "]")
-            },
-            &Operand::RegDispMasked(ref spec, disp, ref mask_reg) => {
-                write!(f, "[{} ", regspec_label(spec))?;
-                format_number_i32(colors, f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-                write!(f, "]")?;
-                write!(f, "{{{}}}", regspec_label(mask_reg))
-            },
-            &Operand::RegDerefMasked(ref spec, ref mask_reg) => {
-                f.write_str("[")?;
-                f.write_str(regspec_label(spec))?;
-                f.write_str("]")?;
-                write!(f, "{{{}}}", regspec_label(mask_reg))
-            },
-            &Operand::RegScaleMasked(ref spec, scale, ref mask_reg) => {
-                write!(f, "[{} * {}]",
-                    regspec_label(spec),
-                    colors.number(scale)
-                )?;
-                write!(f, "{{{}}}", regspec_label(mask_reg))
-            },
-            &Operand::RegScaleDispMasked(ref spec, scale, disp, ref mask_reg) => {
-                write!(f, "[{} * {} ",
-                    regspec_label(spec),
-                    colors.number(scale),
-                )?;
-                format_number_i32(colors, f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-                write!(f, "]")?;
-                write!(f, "{{{}}}", regspec_label(mask_reg))
-            },
-            &Operand::RegIndexBaseMasked(ref base, ref index, ref mask_reg) => {
-                f.write_str("[")?;
-                f.write_str(regspec_label(base))?;
-                f.write_str(" + ")?;
-                f.write_str(regspec_label(index))?;
-                f.write_str("]")?;
-                write!(f, "{{{}}}", regspec_label(mask_reg))
-            }
-            &Operand::RegIndexBaseDispMasked(ref base, ref index, disp, ref mask_reg) => {
-                write!(f, "[{} + {} ",
-                    regspec_label(base),
-                    regspec_label(index),
-                )?;
-                format_number_i32(colors, f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-                write!(f, "]")?;
-                write!(f, "{{{}}}", regspec_label(mask_reg))
-            },
-            &Operand::RegIndexBaseScaleMasked(ref base, ref index, scale, ref mask_reg) => {
-                write!(f, "[{} + {} * {}]",
-                    regspec_label(base),
-                    regspec_label(index),
-                    colors.number(scale)
-                )?;
-                write!(f, "{{{}}}", regspec_label(mask_reg))
-            }
-            &Operand::RegIndexBaseScaleDispMasked(ref base, ref index, scale, disp, ref mask_reg) => {
-                write!(f, "[{} + {} * {} ",
-                    regspec_label(base),
-                    regspec_label(index),
-                    colors.number(scale),
-                )?;
-                format_number_i32(colors, f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-                write!(f, "]")?;
-                write!(f, "{{{}}}", regspec_label(mask_reg))
-            },
-            &Operand::Nothing => { Ok(()) },
-        }
+        let mut f = yaxpeax_arch::display::NoColorsSink {
+            out: f
+        };
+        let mut visitor = ColorizingOperandVisitor {
+            f: &mut f
+        };
+        self.visit(&mut visitor)
     }
 }
 
@@ -375,15 +184,15 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
 
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_u8(&mut self, imm: u8) -> Result<Self::Ok, Self::Error> {
-        self.f.span_start(TokenType::Immediate);
+        self.f.span_start_immediate();
         self.f.write_fixed_size("0x")?;
         self.f.write_u8(imm)?;
-        self.f.span_end(TokenType::Immediate);
+        self.f.span_end_immediate();
         Ok(())
     }
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_i8(&mut self, imm: i8) -> Result<Self::Ok, Self::Error> {
-        self.f.span_start(TokenType::Immediate);
+        self.f.span_start_immediate();
         let mut v = imm as u8;
         if imm < 0 {
             self.f.write_char('-')?;
@@ -391,20 +200,20 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         }
         self.f.write_fixed_size("0x")?;
         self.f.write_u8(v)?;
-        self.f.span_end(TokenType::Immediate);
+        self.f.span_end_immediate();
         Ok(())
     }
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_u16(&mut self, imm: u16) -> Result<Self::Ok, Self::Error> {
-        self.f.span_start(TokenType::Immediate);
+        self.f.span_start_immediate();
         self.f.write_fixed_size("0x")?;
         self.f.write_u16(imm)?;
-        self.f.span_end(TokenType::Immediate);
+        self.f.span_end_immediate();
         Ok(())
     }
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_i16(&mut self, imm: i16) -> Result<Self::Ok, Self::Error> {
-        self.f.span_start(TokenType::Immediate);
+        self.f.span_start_immediate();
         let mut v = imm as u16;
         if imm < 0 {
             self.f.write_char('-')?;
@@ -412,19 +221,19 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         }
         self.f.write_fixed_size("0x")?;
         self.f.write_u16(v)?;
-        self.f.span_end(TokenType::Immediate);
+        self.f.span_end_immediate();
         Ok(())
     }
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
-        self.f.span_start(TokenType::Immediate);
+        self.f.span_start_immediate();
         self.f.write_fixed_size("0x")?;
         self.f.write_u32(imm)?;
-        self.f.span_end(TokenType::Immediate);
+        self.f.span_end_immediate();
         Ok(())
     }
     fn visit_i32(&mut self, imm: i32) -> Result<Self::Ok, Self::Error> {
-        self.f.span_start(TokenType::Immediate);
+        self.f.span_start_immediate();
         let mut v = imm as u32;
         if imm < 0 {
             self.f.write_char('-')?;
@@ -432,20 +241,20 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         }
         self.f.write_fixed_size("0x")?;
         self.f.write_u32(v)?;
-        self.f.span_end(TokenType::Immediate);
+        self.f.span_end_immediate();
         Ok(())
     }
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_u64(&mut self, imm: u64) -> Result<Self::Ok, Self::Error> {
-        self.f.span_start(TokenType::Immediate);
+        self.f.span_start_immediate();
         self.f.write_fixed_size("0x")?;
         self.f.write_u64(imm)?;
-        self.f.span_end(TokenType::Immediate);
+        self.f.span_end_immediate();
         Ok(())
     }
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_i64(&mut self, imm: i64) -> Result<Self::Ok, Self::Error> {
-        self.f.span_start(TokenType::Immediate);
+        self.f.span_start_immediate();
         let mut v = imm as u64;
         if imm < 0 {
             self.f.write_char('-')?;
@@ -453,25 +262,25 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisi
         }
         self.f.write_fixed_size("0x")?;
         self.f.write_u64(v)?;
-        self.f.span_end(TokenType::Immediate);
+        self.f.span_end_immediate();
         Ok(())
     }
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_reg(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
-        self.f.span_start(TokenType::Register);
+        self.f.span_start_register();
         unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
-        self.f.span_end(TokenType::Register);
+        self.f.span_end_register();
         Ok(())
     }
     fn visit_reg_mask_merge(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
-        self.f.span_start(TokenType::Register);
+        self.f.span_start_register();
         unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
-        self.f.span_end(TokenType::Register);
+        self.f.span_end_register();
         if mask.num != 0 {
             self.f.write_fixed_size("{")?;
-            self.f.span_start(TokenType::Register);
+            self.f.span_start_register();
             unsafe { self.f.write_lt_8(regspec_label(&mask))?; }
-            self.f.span_end(TokenType::Register);
+            self.f.span_end_register();
             self.f.write_fixed_size("}")?;
         }
         if let MergeMode::Zero = merge_mode {
@@ -3923,20 +3732,30 @@ pub(crate) fn contextualize_c<T: DisplaySink>(instr: &Instruction, out: &mut T) 
     }
 
     fn write_jmp_operand<T: fmt::Write>(op: Operand, out: &mut T) -> fmt::Result {
+        let mut out = yaxpeax_arch::display::NoColorsSink {
+            out,
+        };
+        use core::fmt::Write;
         match op {
             Operand::ImmediateI8(rel) => {
-                if rel >= 0 {
-                    write!(out, "$+{}", (signed_i32_hex(rel as i32)))
+                let rel = if rel >= 0 {
+                    out.write_str("$+")?;
+                    rel as u8
                 } else {
-                    write!(out, "${}", (signed_i32_hex(rel as i32)))
-                }
+                    out.write_str("$-")?;
+                    rel.unsigned_abs()
+                };
+                out.write_prefixed_u8(rel)
             }
             Operand::ImmediateI32(rel) => {
-                if rel >= 0 {
-                    write!(out, "$+{}", (signed_i32_hex(rel)))
+                let rel = if rel >= 0 {
+                    out.write_str("$+")?;
+                    rel as u32
                 } else {
-                    write!(out, "${}", (signed_i32_hex(rel)))
-                }
+                    out.write_str("$-")?;
+                    rel.unsigned_abs()
+                };
+                out.write_prefixed_u32(rel)
             }
             other => {
                 write!(out, "{}", other)
@@ -4217,7 +4036,7 @@ impl <'instr, T: fmt::Write, Y: YaxColors> ShowContextual<u64, NoContext, T, Y> 
             style,
         } = self;
 
-        let mut out = crate::display::NoColorsSink {
+        let mut out = yaxpeax_arch::display::NoColorsSink {
             out: out,
         };
 
@@ -4235,7 +4054,7 @@ impl <'instr, T: fmt::Write, Y: YaxColors> ShowContextual<u64, NoContext, T, Y> 
 #[cfg(feature="std")]
 impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::String>], T, Y> for Instruction {
     fn contextualize(&self, colors: &Y, _address: u64, context: Option<&[Option<alloc::string::String>]>, out: &mut T) -> fmt::Result {
-        let mut out = crate::display::NoColorsSink {
+        let mut out = yaxpeax_arch::display::NoColorsSink {
             out,
         };
         let out = &mut out;
@@ -4539,11 +4358,11 @@ impl InstructionTextBuffer {
     /// into.
     ///
     /// SAFETY: callers must print at most one instruction into this handle.
-    unsafe fn write_handle(&mut self) -> crate::display::InstructionTextSink {
+    unsafe fn write_handle(&mut self) -> yaxpeax_arch::display::InstructionTextSink {
         self.content.clear();
         // Safety: `content` was just cleared, so writing begins at the start of the buffer.
         // `content`is large enough to hold a fully-formatted instruction (see
         // `InstructionTextBuffer::new`).
-        crate::display::InstructionTextSink::new(&mut self.content)
+        yaxpeax_arch::display::InstructionTextSink::new(&mut self.content)
     }
 }

@@ -79,7 +79,7 @@ fn test_display_under(decoder: &InstDecoder, data: &[u8], expected: &'static str
                     );
 
                     let mut text2 = String::new();
-                    let mut out = yaxpeax_x86::display::NoColorsSink {
+                    let mut out = yaxpeax_arch::display::NoColorsSink {
                         out: &mut text2,
                     };
                     instr.write_to(&mut out).expect("printing succeeds");

@@ -802,6 +802,52 @@ impl Operand {
             }
         }
     }
+
+    /// provided for parity with [`Instruction::visit_operand`]. this has little utility other than
+    /// to reuse an `OperandVisitor` on an `Operand` directly.
+    pub fn visit<T: OperandVisitor>(&self, visitor: &mut T) -> Result<T::Ok, T::Error> {
+        match self {
+            Operand::Nothing => {
+                visitor.visit_other()
+            }
+            Operand::Register(reg) => {
+                visitor.visit_reg(*reg)
+            }
+            Operand::RegDeref(reg) => {
+                visitor.visit_deref(*reg)
+            }
+            Operand::RegDisp(reg, disp) => {
+                visitor.visit_disp(*reg, *disp)
+            }
+            Operand::ImmediateI8(imm) => visitor.visit_i8(*imm),
+            Operand::ImmediateU8(imm) => visitor.visit_u8(*imm),
+            Operand::ImmediateI16(imm) => visitor.visit_i16(*imm),
+            Operand::ImmediateU16(imm) => visitor.visit_u16(*imm),
+            Operand::ImmediateI32(imm) => visitor.visit_i32(*imm),
+            Operand::ImmediateU32(imm) => visitor.visit_u32(*imm),
+            Operand::ImmediateI64(imm) => visitor.visit_i64(*imm),
+            Operand::ImmediateU64(imm) => visitor.visit_u64(*imm),
+            Operand::DisplacementU32(disp) => visitor.visit_abs_u32(*disp),
+            Operand::DisplacementU64(disp) => visitor.visit_abs_u64(*disp),
+            Operand::RegScale(reg, scale) => visitor.visit_reg_scale(*reg, *scale),
+            Operand::RegScaleDisp(reg, scale, disp) => visitor.visit_reg_scale_disp(*reg, *scale, *disp),
+            Operand::RegIndexBase(_, _) => { /* not actually reachable anymore */ visitor.visit_other() },
+            Operand::RegIndexBaseDisp(_, _, _) => { /* not actually reachable anymore */ visitor.visit_other() },
+            Operand::RegIndexBaseScale(base, index, scale) => visitor.visit_index_base_scale(*base, *index, *scale),
+            Operand::RegIndexBaseScaleDisp(base, index, scale, disp) => visitor.visit_index_base_scale_disp(*base, *index, *scale, *disp),
+            Operand::RegisterMaskMerge(reg, mask, merge) => visitor.visit_reg_mask_merge(*reg, *mask, *merge),
+            Operand::RegisterMaskMergeSae(reg, mask, merge, sae) => visitor.visit_reg_mask_merge_sae(*reg, *mask, *merge, *sae),
+            Operand::RegisterMaskMergeSaeNoround(reg, mask, merge) => visitor.visit_reg_mask_merge_sae_noround(*reg, *mask, *merge),
+            Operand::RegDerefMasked(reg, mask) => visitor.visit_reg_deref_masked(*reg, *mask),
+            Operand::RegDispMasked(reg, disp, mask) => visitor.visit_reg_disp_masked(*reg, *disp, *mask),
+            Operand::RegScaleMasked(reg, scale, mask) => visitor.visit_reg_scale_masked(*reg, *scale, *mask),
+            Operand::RegIndexBaseMasked(_, _, _) => { /* not actually reachable anymore */ visitor.visit_other() },
+            Operand::RegIndexBaseDispMasked(_, _, _, _) => { /* not actually reachable anymore */ visitor.visit_other() },
+            Operand::RegScaleDispMasked(base, scale, disp, mask) => visitor.visit_reg_scale_disp_masked(*base, *scale, *disp, *mask),
+            Operand::RegIndexBaseScaleMasked(base, index, scale, mask) => visitor.visit_index_base_scale_masked(*base, *index, *scale, *mask),
+            Operand::RegIndexBaseScaleDispMasked(base, index, scale, disp, mask) => visitor.visit_index_base_scale_disp_masked(*base, *index, *scale, *disp, *mask),
+        }
+    }
 }
 
 #[test]

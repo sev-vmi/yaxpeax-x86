@@ -139,8 +139,6 @@ pub mod real_mode;
 pub use real_mode::Arch as x86_16;
 
 mod safer_unchecked;
-#[cfg(feature = "fmt")]
-pub mod display;
 
 const MEM_SIZE_STRINGS: [&'static str; 65] = [
     "BUG",
