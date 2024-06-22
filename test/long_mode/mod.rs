@@ -79,14 +79,12 @@ fn test_display_under(decoder: &InstDecoder, data: &[u8], expected: &'static str
                     );
 
                     let mut text2 = String::new();
-                    let mut out = yaxpeax_arch::display::NoColorsSink {
-                        out: &mut text2,
-                    };
+                    let mut out = yaxpeax_arch::display::FmtSink::new(&mut text2);
                     instr.write_to(&mut out).expect("printing succeeds");
 
                     assert!(
                         text2 == text,
-                        "display error through NoColorsSink for {}:\n  decoded: {:?} under decoder {}\n displayed: {}\n expected: {}\n",
+                        "display error through FmtSink for {}:\n  decoded: {:?} under decoder {}\n displayed: {}\n expected: {}\n",
                         hex,
                         instr,
                         decoder,

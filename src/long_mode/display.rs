@@ -163,22 +163,20 @@ impl fmt::Display for Operand {
 }
 
 impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for Operand {
-    fn colorize(&self, colors: &Y, f: &mut T) -> fmt::Result {
-        let mut f = yaxpeax_arch::display::NoColorsSink {
-            out: f
-        };
-        let mut visitor = ColorizingOperandVisitor {
+    fn colorize(&self, _colors: &Y, f: &mut T) -> fmt::Result {
+        let mut f = yaxpeax_arch::display::FmtSink::new(f);
+        let mut visitor = DisplayingOperandVisitor {
             f: &mut f
         };
         self.visit(&mut visitor)
     }
 }
 
-struct ColorizingOperandVisitor<'a, T> {
+struct DisplayingOperandVisitor<'a, T> {
     f: &'a mut T,
 }
 
-impl <T: DisplaySink> crate::long_mode::OperandVisitor for ColorizingOperandVisitor<'_, T> {
+impl <T: DisplaySink> crate::long_mode::OperandVisitor for DisplayingOperandVisitor<'_, T> {
     type Ok = ();
     type Error = core::fmt::Error;
 
@@ -3536,8 +3534,17 @@ impl <'instr, T: fmt::Write, Y: YaxColors> Colorize<T, Y> for InstructionDisplay
 struct NoContext;
 
 impl Instruction {
+    /// format this instruction into `out` as a plain text string.
     #[cfg_attr(feature="profiling", inline(never))]
-    pub fn write_to<T: DisplaySink>(&self, out: &mut T) -> fmt::Result {
+    pub fn write_to<T: fmt::Write>(&self, out: &mut T) -> fmt::Result {
+        let mut out = yaxpeax_arch::display::FmtSink::new(out);
+        contextualize_intel(self, &mut out)
+    }
+
+    /// format this instruction into `out`, which may perform additional styling based on its
+    /// `DisplaySink` implementation.
+    #[cfg_attr(feature="profiling", inline(never))]
+    pub fn display_into<T: DisplaySink>(&self, out: &mut T) -> fmt::Result {
         contextualize_intel(self, out)
     }
 }
@@ -3590,7 +3597,7 @@ pub(crate) fn contextualize_intel<T: DisplaySink>(instr: &Instruction, out: &mut
             }
         }
 
-        let mut displayer = ColorizingOperandVisitor {
+        let mut displayer = DisplayingOperandVisitor {
             f: out,
         };
         instr.visit_operand(0 as u8, &mut displayer)?;
@@ -3619,7 +3626,7 @@ pub(crate) fn contextualize_intel<T: DisplaySink>(instr: &Instruction, out: &mut
                 }
             }
 
-            let mut displayer = ColorizingOperandVisitor {
+            let mut displayer = DisplayingOperandVisitor {
                 f: out,
             };
 
@@ -3732,9 +3739,7 @@ pub(crate) fn contextualize_c<T: DisplaySink>(instr: &Instruction, out: &mut T) 
     }
 
     fn write_jmp_operand<T: fmt::Write>(op: Operand, out: &mut T) -> fmt::Result {
-        let mut out = yaxpeax_arch::display::NoColorsSink {
-            out,
-        };
+        let mut out = yaxpeax_arch::display::FmtSink::new(out);
         use core::fmt::Write;
         match op {
             Operand::ImmediateI8(rel) => {
@@ -4036,9 +4041,7 @@ impl <'instr, T: fmt::Write, Y: YaxColors> ShowContextual<u64, NoContext, T, Y> 
             style,
         } = self;
 
-        let mut out = yaxpeax_arch::display::NoColorsSink {
-            out: out,
-        };
+        let mut out = yaxpeax_arch::display::FmtSink::new(out);
 
         match style {
             DisplayStyle::Intel => {
@@ -4054,9 +4057,7 @@ impl <'instr, T: fmt::Write, Y: YaxColors> ShowContextual<u64, NoContext, T, Y> 
 #[cfg(feature="std")]
 impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::String>], T, Y> for Instruction {
     fn contextualize(&self, colors: &Y, _address: u64, context: Option<&[Option<alloc::string::String>]>, out: &mut T) -> fmt::Result {
-        let mut out = yaxpeax_arch::display::NoColorsSink {
-            out,
-        };
+        let mut out = yaxpeax_arch::display::FmtSink::new(out);
         let out = &mut out;
         use core::fmt::Write;
 
@@ -4092,7 +4093,7 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::St
                     }
                 }
 
-                let mut displayer = ColorizingOperandVisitor {
+                let mut displayer = DisplayingOperandVisitor {
                     f: out,
                 };
                 self.visit_operand(0, &mut displayer)?;
@@ -4109,7 +4110,7 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::St
                         },
                         _ => {
                             write!(out, ", ")?;
-                            let mut displayer = ColorizingOperandVisitor {
+                            let mut displayer = DisplayingOperandVisitor {
                                 f: out,
                             };
                             self.visit_operand(i as u8, &mut displayer)?;
