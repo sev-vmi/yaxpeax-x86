@@ -2942,3 +2942,107 @@ impl<'a, F: DisplaySink> super::OperandVisitor for RelativeBranchPrinter<'a, F> 
         Ok(false)
     }
 }
+
+#[cfg(feature="alloc")]
+mod buffer_sink {
+    use core::fmt;
+    use super::super::{DisplayStyle, InstructionDisplayer};
+    use super::{contextualize_c, contextualize_intel};
+
+    /// helper to format `amd64` instructions with highest throughput and least configuration. this is
+    /// functionally a buffer for one x86 instruction's text.
+    ///
+    /// ### when to use this over `fmt::Display`?
+    ///
+    /// `fmt::Display` is a fair choice in most cases. in some cases, `InstructionTextBuffer` may
+    /// support formatting options that may be difficult to configure for a `Display` impl.
+    /// additionally, `InstructionTextBuffer` may be able to specialize more effectively where
+    /// `fmt::Display`, writing to a generic `fmt::Write`, may not.
+    ///
+    /// if your use case for `yaxpeax-x86` involves being bounded on the speed of disassembling and
+    /// formatting instructions, [`InstructionTextBuffer::format_inst`] has been measured as up to 11%
+    /// faster than an equivalent `write!(buf, "{}", inst)`.
+    ///
+    /// `InstructionTextBuffer` involves internal allocations; if your use case for `yaxpeax-x86`
+    /// requires allocations never occurring, it is not an appropriate tool.
+    ///
+    /// ### example
+    ///
+    /// ```
+    /// use yaxpeax_x86::long_mode::InstDecoder;
+    /// use yaxpeax_x86::long_mode::InstructionTextBuffer;
+    /// use yaxpeax_x86::long_mode::DisplayStyle;
+    ///
+    /// let bytes = &[0x33, 0xc0];
+    /// let inst = InstDecoder::default().decode_slice(bytes).expect("can decode");
+    /// let mut text_buf = InstructionTextBuffer::new();
+    /// assert_eq!(
+    ///     text_buf.format_inst(&inst.display_with(DisplayStyle::Intel)).expect("can format"),
+    ///     "xor eax, eax"
+    /// );
+    ///
+    /// // or, getting the formatted instruction with `text_str`:
+    /// assert_eq!(
+    ///     text_buf.text_str(),
+    ///     "xor eax, eax"
+    /// );
+    /// ```
+    pub struct InstructionTextBuffer {
+        content: alloc::string::String,
+    }
+
+    impl InstructionTextBuffer {
+        /// create an `InstructionTextBuffer` with default settings. `InstructionTextBuffer`'s default
+        /// settings format instructions identically to their corresponding `fmt::Display`.
+        pub fn new() -> Self {
+            let mut buf = alloc::string::String::new();
+            // TODO: move 512 out to a MAX_INSTRUCTION_LEN const and appropriate justification (and
+            // fuzzing and ..)
+            buf.reserve(512);
+            Self {
+                content: buf,
+            }
+        }
+
+        /// format `inst` into this buffer. returns a borrow of that same internal buffer for convenience.
+        ///
+        /// this clears and reuses an internal buffer; if an instruction had been previously formatted
+        /// through this buffer, it will be overwritten.
+        pub fn format_inst<'buf, 'instr>(&'buf mut self, display: &InstructionDisplayer<'instr>) -> Result<&'buf str, fmt::Error> {
+            // Safety: this sink is used to format exactly one instruction and then dropped. it can
+            // never escape `format_inst`.
+            let mut handle = unsafe { self.write_handle() };
+
+            match display.style {
+                DisplayStyle::Intel => {
+                    contextualize_intel(&display.instr, &mut handle)?;
+                }
+                DisplayStyle::C => {
+                    contextualize_c(&display.instr, &mut handle)?;
+                }
+            }
+
+            Ok(self.text_str())
+        }
+
+        /// return a borrow of the internal buffer. if an instruction has been formatted, the
+        /// returned `&str` contains that instruction's buffered text.
+        pub fn text_str(&self) -> &str {
+            self.content.as_str()
+        }
+
+        /// do the necessary bookkeeping and provide an `InstructionTextSink` to write an instruction
+        /// into.
+        ///
+        /// SAFETY: callers must print at most one instruction into this handle.
+        unsafe fn write_handle(&mut self) -> yaxpeax_arch::display::InstructionTextSink {
+            self.content.clear();
+            // Safety: `content` was just cleared, so writing begins at the start of the buffer.
+            // `content`is large enough to hold a fully-formatted instruction (see
+            // `InstructionTextBuffer::new`).
+            yaxpeax_arch::display::InstructionTextSink::new(&mut self.content)
+        }
+    }
+}
+#[cfg(feature="alloc")]
+pub use buffer_sink::InstructionTextBuffer;
