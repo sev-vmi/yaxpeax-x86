@@ -6663,7 +6663,7 @@ fn read_with_annotations<
     self.read_operands(decoder, words, instruction, record, sink)?;
 
     if self.check_lock {
-        if (instruction.opcode as u32) < 0x1000 || !instruction.operands[0].is_memory() {
+        if !instruction.opcode.can_lock() || !instruction.operands[0].is_memory() {
             return Err(DecodeError::InvalidPrefixes);
         }
     }
