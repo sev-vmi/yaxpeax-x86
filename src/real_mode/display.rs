@@ -3376,7 +3376,7 @@ fn contextualize_intel<T: fmt::Write, Y: YaxColors>(instr: &Instruction, colors:
     }
 
     if instr.prefixes.rep_any() {
-        if [Opcode::MOVS, Opcode::CMPS, Opcode::LODS, Opcode::STOS, Opcode::INS, Opcode::OUTS].contains(&instr.opcode) {
+        if instr.opcode.can_rep() {
             if instr.prefixes.rep() {
                 write!(out, "rep ")?;
             } else if instr.prefixes.repnz() {
