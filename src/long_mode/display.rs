@@ -272,7 +272,7 @@ struct DisplayingOperandVisitor<'a, T> {
     f: &'a mut T,
 }
 
-impl <T: DisplaySink> crate::long_mode::OperandVisitor for DisplayingOperandVisitor<'_, T> {
+impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> {
     type Ok = ();
     type Error = core::fmt::Error;
 
@@ -4237,7 +4237,7 @@ struct RelativeBranchPrinter<'a, F: DisplaySink> {
     out: &'a mut F,
 }
 
-impl<'a, F: DisplaySink> crate::long_mode::OperandVisitor for RelativeBranchPrinter<'a, F> {
+impl<'a, F: DisplaySink> super::OperandVisitor for RelativeBranchPrinter<'a, F> {
     // return true if we printed a relative branch offset, false otherwise
     type Ok = bool;
     // but errors are errors
@@ -4336,7 +4336,7 @@ impl<'a, F: DisplaySink> crate::long_mode::OperandVisitor for RelativeBranchPrin
     fn visit_reg_mask_merge(&mut self, _spec: RegSpec, _mask: RegSpec, _merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
-    fn visit_reg_mask_merge_sae(&mut self, _spec: RegSpec, _mask: RegSpec, _merge_mode: MergeMode, _sae_mode: crate::long_mode::SaeMode) -> Result<Self::Ok, Self::Error> {
+    fn visit_reg_mask_merge_sae(&mut self, _spec: RegSpec, _mask: RegSpec, _merge_mode: MergeMode, _sae_mode: super::SaeMode) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
     fn visit_reg_mask_merge_sae_noround(&mut self, _spec: RegSpec, _mask: RegSpec, _merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
