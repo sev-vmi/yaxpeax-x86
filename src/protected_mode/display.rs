@@ -7,6 +7,104 @@ use yaxpeax_arch::display::*;
 use crate::MEM_SIZE_STRINGS;
 use crate::protected_mode::{RegSpec, Opcode, Operand, MergeMode, InstDecoder, Instruction, Segment, PrefixVex, OperandSpec};
 
+use yaxpeax_arch::display::DisplaySink;
+
+trait DisplaySinkExt {
+    // `write_opcode` depends on all mnemonics being less than 32 bytes long. check that here, at
+    // compile time. referenced later to force evaluation of this const.
+    const MNEMONIC_LT_32: () = {
+        let mut i = 0;
+        while i < MNEMONICS.len() {
+            let name = &MNEMONICS[i];
+            if name.len() >= 32 {
+                panic!("mnemonic too long");
+            }
+            i += 1;
+        }
+    };
+
+    // `write_reg` depends on all register names being less than 8 bytes long. check that here, at
+    // compile time. referenced later to force evaluation of this const.
+    const REG_LABEL_LT_8: () = {
+        let mut i = 0;
+        while i < REG_NAMES.len() {
+            let name = &REG_NAMES[i];
+            if name.len() >= 8 {
+                panic!("register name too long");
+            }
+            i += 1;
+        }
+    };
+
+    // `write_mem_size_label` depends on all memory size labels being less than 8 bytes long. check
+    // that here, at compile time. referenced later to force evaluation of this const.
+    const MEM_SIZE_LABEL_LT_8: () = {
+        let mut i = 0;
+        while i < crate::MEM_SIZE_STRINGS.len() {
+            let name = &MEM_SIZE_STRINGS[i];
+            if name.len() >= 8 {
+                panic!("memory label name too long");
+            }
+            i += 1;
+        }
+    };
+
+    // `write_sae_mode` depends on all sae mode labels being less than 16 bytes long. check that
+    // here, at compile time. referenced later to force evaluation of this const.
+    const SAE_LABEL_LT_16: () = {
+        let mut i = 0;
+        while i < super::SAE_MODES.len() {
+            let mode = &super::SAE_MODES[i];
+            if mode.label().len() >= 16 {
+                panic!("sae mode label too long");
+            }
+            i += 1;
+        }
+    };
+
+    fn write_opcode(&mut self, opcode: super::Opcode) -> Result<(), core::fmt::Error>;
+    fn write_reg(&mut self, reg: RegSpec) -> Result<(), core::fmt::Error>;
+    fn write_mem_size_label(&mut self, mem_size: u8) -> Result<(), core::fmt::Error>;
+    fn write_sae_mode(&mut self, sae: super::SaeMode) -> Result<(), core::fmt::Error>;
+}
+
+impl<T: DisplaySink> DisplaySinkExt for T {
+    #[inline(always)]
+    fn write_opcode(&mut self, opcode: super::Opcode) -> Result<(), core::fmt::Error> {
+        let name = opcode.name();
+
+        let _ = Self::MNEMONIC_LT_32;
+        // Safety: all opcode mnemonics are 31 bytes or fewer.
+        unsafe { self.write_lt_32(name) }
+    }
+
+    #[inline(always)]
+    fn write_reg(&mut self, reg: RegSpec) -> Result<(), core::fmt::Error> {
+        let label = regspec_label(&reg);
+
+        let _ = Self::REG_LABEL_LT_8;
+        // Safety: all register labels are 7 bytes or fewer.
+        unsafe { self.write_lt_8(label) }
+    }
+
+    #[inline(always)]
+    fn write_mem_size_label(&mut self, mem_size: u8) -> Result<(), core::fmt::Error> {
+        let label = mem_size_label(mem_size);
+        let _ = Self::MEM_SIZE_LABEL_LT_8;
+        // Safety: all memory size labels are 7 bytes or fewer
+        unsafe { self.write_lt_8(label) }
+    }
+
+    #[inline(always)]
+    fn write_sae_mode(&mut self, sae_mode: super::SaeMode) -> Result<(), core::fmt::Error> {
+        let label = sae_mode.label();
+
+        let _ = Self::SAE_LABEL_LT_16;
+        // Safety: all sae labels are 15 bytes or fewer.
+        unsafe { self.write_lt_16(label) }
+    }
+}
+
 impl fmt::Display for InstDecoder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self == &InstDecoder::default() {
@@ -129,6 +227,10 @@ pub(crate) fn regspec_label(spec: &RegSpec) -> &'static str {
     unsafe { REG_NAMES.get_kinda_unchecked((spec.num as u16 + ((spec.bank as u16) << 3)) as usize) }
 }
 
+pub(crate) fn mem_size_label(size: u8) -> &'static str {
+    unsafe { MEM_SIZE_STRINGS.get_kinda_unchecked(size as usize) }
+}
+
 impl fmt::Display for RegSpec {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str(regspec_label(self))
@@ -143,201 +245,363 @@ impl fmt::Display for Operand {
 
 impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for Operand {
     fn colorize(&self, colors: &Y, f: &mut T) -> fmt::Result {
-        match self {
-            &Operand::ImmediateU8(imm) => {
-                write!(f, "{}", colors.number(u8_hex(imm)))
-            }
-            &Operand::ImmediateI8(imm) => {
-                write!(f, "{}",
-                    colors.number(signed_i8_hex(imm)))
-            },
-            &Operand::ImmediateU16(imm) => {
-                write!(f, "{}", colors.number(u16_hex(imm)))
-            }
-            &Operand::ImmediateI16(imm) => {
-                write!(f, "{}",
-                    colors.number(signed_i16_hex(imm)))
-            },
-            &Operand::ImmediateU32(imm) => {
-                write!(f, "{}", colors.number(u32_hex(imm)))
-            }
-            &Operand::ImmediateI32(imm) => {
-                write!(f, "{}",
-                    colors.number(signed_i32_hex(imm)))
-            },
-            &Operand::AbsoluteFarAddress { segment, address } => {
-                write!(f, "{}:{}",
-                    colors.number(u16_hex(segment as u16)),
-                    colors.number(u32_hex(address as u32)),
-                )
-            },
-            &Operand::Register(ref spec) => {
-                f.write_str(regspec_label(spec))
-            }
-            &Operand::RegisterMaskMerge(ref spec, ref mask, merge_mode) => {
-                f.write_str(regspec_label(spec))?;
-                if mask.num != 0 {
-                    f.write_str("{")?;
-                    f.write_str(regspec_label(mask))?;
-                    f.write_str("}")?;
-                }
-                if let MergeMode::Zero = merge_mode {
-                    f.write_str("{z}")?;
-                }
-                Ok(())
-            }
-            &Operand::RegisterMaskMergeSae(ref spec, ref mask, merge_mode, sae_mode) => {
-                f.write_str(regspec_label(spec))?;
-                if mask.num != 0 {
-                    f.write_str("{")?;
-                    f.write_str(regspec_label(mask))?;
-                    f.write_str("}")?;
-                }
-                if let MergeMode::Zero = merge_mode {
-                    f.write_str("{z}")?;
-                }
-                f.write_str(sae_mode.label())?;
-                Ok(())
-            }
-            &Operand::RegisterMaskMergeSaeNoround(ref spec, ref mask, merge_mode) => {
-                f.write_str(regspec_label(spec))?;
-                if mask.num != 0 {
-                    f.write_str("{")?;
-                    f.write_str(regspec_label(mask))?;
-                    f.write_str("}")?;
-                }
-                if let MergeMode::Zero = merge_mode {
-                    f.write_str("{z}")?;
-                }
-                f.write_str("{sae}")?;
-                Ok(())
-            }
-            &Operand::DisplacementU16(imm) => {
-                write!(f, "[{}]", colors.address(u16_hex(imm)))
-            }
-            &Operand::DisplacementU32(imm) => {
-                write!(f, "[{}]", colors.address(u32_hex(imm)))
-            }
-            &Operand::RegDisp(ref spec, disp) => {
-                write!(f, "[{} ", regspec_label(spec))?;
-                format_number_i32(colors, f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-                write!(f, "]")
-            },
-            &Operand::RegDeref(ref spec) => {
-                f.write_str("[")?;
-                f.write_str(regspec_label(spec))?;
-                f.write_str("]")
-            },
-            &Operand::RegScale(ref spec, scale) => {
-                write!(f, "[{} * {}]",
-                    regspec_label(spec),
-                    colors.number(scale)
-                )
-            },
-            &Operand::RegScaleDisp(ref spec, scale, disp) => {
-                write!(f, "[{} * {} ",
-                    regspec_label(spec),
-                    colors.number(scale),
-                )?;
-                format_number_i32(colors, f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-                write!(f, "]")
-            },
-            &Operand::RegIndexBase(ref base, ref index) => {
-                f.write_str("[")?;
-                f.write_str(regspec_label(base))?;
-                f.write_str(" + ")?;
-                f.write_str(regspec_label(index))?;
-                f.write_str("]")
-            }
-            &Operand::RegIndexBaseDisp(ref base, ref index, disp) => {
-                write!(f, "[{} + {} ",
-                    regspec_label(base),
-                    regspec_label(index),
-                )?;
-                format_number_i32(colors, f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-                write!(f, "]")
-            },
-            &Operand::RegIndexBaseScale(ref base, ref index, scale) => {
-                write!(f, "[{} + {} * {}]",
-                    regspec_label(base),
-                    regspec_label(index),
-                    colors.number(scale)
-                )
-            }
-            &Operand::RegIndexBaseScaleDisp(ref base, ref index, scale, disp) => {
-                write!(f, "[{} + {} * {} ",
-                    regspec_label(base),
-                    regspec_label(index),
-                    colors.number(scale),
-                )?;
-                format_number_i32(colors, f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-                write!(f, "]")
-            },
-            &Operand::RegDispMasked(ref spec, disp, ref mask_reg) => {
-                write!(f, "[{} ", regspec_label(spec))?;
-                format_number_i32(colors, f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-                write!(f, "]")?;
-                write!(f, "{{{}}}", regspec_label(mask_reg))
-            },
-            &Operand::RegDerefMasked(ref spec, ref mask_reg) => {
-                f.write_str("[")?;
-                f.write_str(regspec_label(spec))?;
-                f.write_str("]")?;
-                write!(f, "{{{}}}", regspec_label(mask_reg))
-            },
-            &Operand::RegScaleMasked(ref spec, scale, ref mask_reg) => {
-                write!(f, "[{} * {}]",
-                    regspec_label(spec),
-                    colors.number(scale)
-                )?;
-                write!(f, "{{{}}}", regspec_label(mask_reg))
-            },
-            &Operand::RegScaleDispMasked(ref spec, scale, disp, ref mask_reg) => {
-                write!(f, "[{} * {} ",
-                    regspec_label(spec),
-                    colors.number(scale),
-                )?;
-                format_number_i32(colors, f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-                write!(f, "]")?;
-                write!(f, "{{{}}}", regspec_label(mask_reg))
-            },
-            &Operand::RegIndexBaseMasked(ref base, ref index, ref mask_reg) => {
-                f.write_str("[")?;
-                f.write_str(regspec_label(base))?;
-                f.write_str(" + ")?;
-                f.write_str(regspec_label(index))?;
-                f.write_str("]")?;
-                write!(f, "{{{}}}", regspec_label(mask_reg))
-            }
-            &Operand::RegIndexBaseDispMasked(ref base, ref index, disp, ref mask_reg) => {
-                write!(f, "[{} + {} ",
-                    regspec_label(base),
-                    regspec_label(index),
-                )?;
-                format_number_i32(colors, f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-                write!(f, "]")?;
-                write!(f, "{{{}}}", regspec_label(mask_reg))
-            },
-            &Operand::RegIndexBaseScaleMasked(ref base, ref index, scale, ref mask_reg) => {
-                write!(f, "[{} + {} * {}]",
-                    regspec_label(base),
-                    regspec_label(index),
-                    colors.number(scale)
-                )?;
-                write!(f, "{{{}}}", regspec_label(mask_reg))
-            }
-            &Operand::RegIndexBaseScaleDispMasked(ref base, ref index, scale, disp, ref mask_reg) => {
-                write!(f, "[{} + {} * {} ",
-                    regspec_label(base),
-                    regspec_label(index),
-                    colors.number(scale),
-                )?;
-                format_number_i32(colors, f, disp, NumberStyleHint::HexSignedWithSignSplit)?;
-                write!(f, "]")?;
-                write!(f, "{{{}}}", regspec_label(mask_reg))
-            },
-            &Operand::Nothing => { Ok(()) },
+        let mut f = yaxpeax_arch::display::FmtSink::new(f);
+        let mut visitor = DisplayingOperandVisitor {
+            f: &mut f
+        };
+        self.visit(&mut visitor)
+    }
+}
+
+struct DisplayingOperandVisitor<'a, T> {
+    f: &'a mut T,
+}
+
+impl <T: DisplaySink> crate::protected_mode::OperandVisitor for DisplayingOperandVisitor<'_, T> {
+    type Ok = ();
+    type Error = core::fmt::Error;
+
+    #[cfg_attr(feature="profiling", inline(never))]
+    fn visit_u8(&mut self, imm: u8) -> Result<Self::Ok, Self::Error> {
+        self.f.span_start_immediate();
+        self.f.write_fixed_size("0x")?;
+        self.f.write_u8(imm)?;
+        self.f.span_end_immediate();
+        Ok(())
+    }
+    #[cfg_attr(feature="profiling", inline(never))]
+    fn visit_i8(&mut self, imm: i8) -> Result<Self::Ok, Self::Error> {
+        self.f.span_start_immediate();
+        let mut v = imm as u8;
+        if imm < 0 {
+            self.f.write_char('-')?;
+            v = -imm as u8;
         }
+        self.f.write_fixed_size("0x")?;
+        self.f.write_u8(v)?;
+        self.f.span_end_immediate();
+        Ok(())
+    }
+    #[cfg_attr(feature="profiling", inline(never))]
+    fn visit_u16(&mut self, imm: u16) -> Result<Self::Ok, Self::Error> {
+        self.f.span_start_immediate();
+        self.f.write_fixed_size("0x")?;
+        self.f.write_u16(imm)?;
+        self.f.span_end_immediate();
+        Ok(())
+    }
+    #[cfg_attr(feature="profiling", inline(never))]
+    fn visit_i16(&mut self, imm: i16) -> Result<Self::Ok, Self::Error> {
+        self.f.span_start_immediate();
+        let mut v = imm as u16;
+        if imm < 0 {
+            self.f.write_char('-')?;
+            v = -imm as u16;
+        }
+        self.f.write_fixed_size("0x")?;
+        self.f.write_u16(v)?;
+        self.f.span_end_immediate();
+        Ok(())
+    }
+    #[cfg_attr(feature="profiling", inline(never))]
+    fn visit_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
+        self.f.span_start_immediate();
+        self.f.write_fixed_size("0x")?;
+        self.f.write_u32(imm)?;
+        self.f.span_end_immediate();
+        Ok(())
+    }
+    fn visit_i32(&mut self, imm: i32) -> Result<Self::Ok, Self::Error> {
+        self.f.span_start_immediate();
+        let mut v = imm as u32;
+        if imm < 0 {
+            self.f.write_char('-')?;
+            v = -imm as u32;
+        }
+        self.f.write_fixed_size("0x")?;
+        self.f.write_u32(v)?;
+        self.f.span_end_immediate();
+        Ok(())
+    }
+    #[cfg_attr(feature="profiling", inline(never))]
+    fn visit_reg(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.span_start_register();
+        self.f.write_reg(reg)?;
+        self.f.span_end_register();
+        Ok(())
+    }
+    fn visit_reg_mask_merge(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
+        self.f.span_start_register();
+        self.f.write_reg(spec)?;
+        self.f.span_end_register();
+        if mask.num != 0 {
+            self.f.write_fixed_size("{")?;
+            self.f.span_start_register();
+            self.f.write_reg(mask)?;
+            self.f.span_end_register();
+            self.f.write_fixed_size("}")?;
+        }
+        if let MergeMode::Zero = merge_mode {
+            self.f.write_fixed_size("{z}")?;
+        }
+        Ok(())
+    }
+    fn visit_reg_mask_merge_sae(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode, sae_mode: super::SaeMode) -> Result<Self::Ok, Self::Error> {
+        self.f.write_reg(spec)?;
+        if mask.num != 0 {
+            self.f.write_fixed_size("{")?;
+            self.f.write_reg(mask)?;
+            self.f.write_fixed_size("}")?;
+        }
+        if let MergeMode::Zero = merge_mode {
+            self.f.write_fixed_size("{z}")?;
+        }
+        self.f.write_sae_mode(sae_mode)?;
+        Ok(())
+    }
+    fn visit_reg_mask_merge_sae_noround(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
+        self.f.write_reg(spec)?;
+        if mask.num != 0 {
+            self.f.write_fixed_size("{")?;
+            self.f.write_reg(mask)?;
+            self.f.write_fixed_size("}")?;
+        }
+        if let MergeMode::Zero = merge_mode {
+            self.f.write_fixed_size("{z}")?;
+        }
+        self.f.write_fixed_size("{sae}")?;
+        Ok(())
+    }
+    fn visit_abs_u16(&mut self, imm: u16) -> Result<Self::Ok, Self::Error> {
+        self.f.write_fixed_size("[")?;
+        self.f.write_fixed_size("0x")?;
+        self.f.write_u16(imm)?;
+        self.f.write_fixed_size("]")?;
+        Ok(())
+    }
+    fn visit_abs_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
+        self.f.write_fixed_size("[")?;
+        self.f.write_fixed_size("0x")?;
+        self.f.write_u32(imm)?;
+        self.f.write_fixed_size("]")?;
+        Ok(())
+    }
+    #[cfg_attr(not(feature="profiling"), inline(always))]
+    #[cfg_attr(feature="profiling", inline(never))]
+    fn visit_disp(&mut self, reg: RegSpec, disp: i32) -> Result<Self::Ok, Self::Error> {
+        self.f.write_char('[')?;
+        self.f.write_reg(reg)?;
+        self.f.write_fixed_size(" ")?;
+
+        {
+            let mut v = disp as u32;
+            if disp < 0 {
+                self.f.write_fixed_size("- 0x")?;
+                v = -disp as u32;
+            } else {
+                self.f.write_fixed_size("+ 0x")?;
+            }
+            self.f.write_u32(v)?;
+        }
+        self.f.write_fixed_size("]")
+    }
+    fn visit_deref(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_fixed_size("[")?;
+        self.f.write_reg(reg)?;
+        self.f.write_fixed_size("]")
+    }
+    fn visit_reg_scale(&mut self, reg: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
+        self.f.write_fixed_size("[")?;
+        self.f.write_reg(reg)?;
+        self.f.write_fixed_size(" * ")?;
+        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_fixed_size("]")?;
+
+        Ok(())
+    }
+    fn visit_reg_scale_disp(&mut self, reg: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
+        self.f.write_fixed_size("[")?;
+        self.f.write_reg(reg)?;
+        self.f.write_fixed_size(" * ")?;
+        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_fixed_size(" ")?;
+
+        {
+            let mut v = disp as u32;
+            if disp < 0 {
+                self.f.write_fixed_size("- 0x")?;
+                v = -disp as u32;
+            } else {
+                self.f.write_fixed_size("+ 0x")?;
+            }
+            self.f.write_u32(v)?;
+        }
+        self.f.write_char(']')
+    }
+    fn visit_index_base_scale(&mut self, base: RegSpec, index: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
+        self.f.write_fixed_size("[")?;
+        self.f.write_reg(base)?;
+        self.f.write_fixed_size(" + ")?;
+        self.f.write_reg(index)?;
+        self.f.write_fixed_size(" * ")?;
+        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_fixed_size("]")
+    }
+    fn visit_index_base_scale_disp(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
+        self.f.write_fixed_size("[")?;
+        self.f.write_reg(base)?;
+        self.f.write_fixed_size(" + ")?;
+        self.f.write_reg(index)?;
+        self.f.write_fixed_size(" * ")?;
+        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_fixed_size(" ")?;
+
+        {
+            let mut v = disp as u32;
+            if disp < 0 {
+                self.f.write_fixed_size("- 0x")?;
+                v = -disp as u32;
+            } else {
+                self.f.write_fixed_size("+ 0x")?;
+            }
+            self.f.write_u32(v)?;
+        }
+        self.f.write_fixed_size("]")
+    }
+    fn visit_reg_disp_masked(&mut self, spec: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_char('[')?;
+        self.f.write_reg(spec)?;
+        self.f.write_char(' ')?;
+        let mut v = disp as u32;
+        if disp < 0 {
+            self.f.write_fixed_size("- 0x")?;
+            v = -disp as u32;
+        } else {
+            self.f.write_fixed_size("+ 0x")?;
+        }
+        self.f.write_u32(v)?;
+        self.f.write_char(']')?;
+        self.f.write_char('{')?;
+        self.f.write_reg(mask_reg)?;
+        self.f.write_char('}')?;
+        Ok(())
+    }
+    fn visit_reg_deref_masked(&mut self, spec: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_fixed_size("[")?;
+        self.f.write_reg(spec)?;
+        self.f.write_fixed_size("]")?;
+        self.f.write_char('{')?;
+        self.f.write_reg(mask_reg)?;
+        self.f.write_char('}')?;
+        Ok(())
+    }
+    fn visit_reg_scale_masked(&mut self, spec: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_fixed_size("[")?;
+        self.f.write_reg(spec)?;
+        self.f.write_fixed_size(" * ")?;
+        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_fixed_size("]")?;
+        self.f.write_char('{')?;
+        self.f.write_reg(mask_reg)?;
+        self.f.write_char('}')?;
+        Ok(())
+    }
+    fn visit_reg_scale_disp_masked(&mut self, spec: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_fixed_size("[")?;
+        self.f.write_reg(spec)?;
+        self.f.write_fixed_size(" * ")?;
+        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_fixed_size(" ")?;
+        let mut v = disp as u32;
+        if disp < 0 {
+            self.f.write_fixed_size("- 0x")?;
+            v = -disp as u32;
+        } else {
+            self.f.write_fixed_size("+ 0x")?;
+        }
+        self.f.write_u32(v)?;
+        self.f.write_char(']')?;
+        self.f.write_char('{')?;
+        self.f.write_reg(mask_reg)?;
+        self.f.write_char('}')?;
+        Ok(())
+    }
+    fn visit_index_base_masked(&mut self, base: RegSpec, index: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_fixed_size("[")?;
+        self.f.write_reg(base)?;
+        self.f.write_fixed_size(" + ")?;
+        self.f.write_reg(index)?;
+        self.f.write_fixed_size("]")?;
+        self.f.write_char('{')?;
+        self.f.write_reg(mask_reg)?;
+        self.f.write_char('}')?;
+        Ok(())
+    }
+    fn visit_index_base_disp_masked(&mut self, base: RegSpec, index: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_fixed_size("[")?;
+        self.f.write_reg(base)?;
+        self.f.write_fixed_size(" + ")?;
+        self.f.write_reg(index)?;
+        self.f.write_fixed_size(" ")?;
+        let mut v = disp as u32;
+        if disp < 0 {
+            self.f.write_fixed_size("- 0x")?;
+            v = -disp as u32;
+        } else {
+            self.f.write_fixed_size("+ 0x")?;
+        }
+        self.f.write_u32(v)?;
+        self.f.write_char(']')?;
+        self.f.write_char('{')?;
+        self.f.write_reg(mask_reg)?;
+        self.f.write_char('}')?;
+        Ok(())
+    }
+    fn visit_index_base_scale_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_fixed_size("[")?;
+        self.f.write_reg(base)?;
+        self.f.write_fixed_size(" + ")?;
+        self.f.write_reg(index)?;
+        self.f.write_fixed_size(" * ")?;
+        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_fixed_size("]")?;
+        self.f.write_char('{')?;
+        self.f.write_reg(mask_reg)?;
+        self.f.write_char('}')?;
+        Ok(())
+    }
+    fn visit_index_base_scale_disp_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+        self.f.write_fixed_size("[")?;
+        self.f.write_reg(base)?;
+        self.f.write_fixed_size(" + ")?;
+        self.f.write_reg(index)?;
+        self.f.write_fixed_size(" * ")?;
+        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_char(' ')?;
+        let mut v = disp as u32;
+        if disp < 0 {
+            self.f.write_fixed_size("- 0x")?;
+            v = -disp as u32;
+        } else {
+            self.f.write_fixed_size("+ 0x")?;
+        }
+        self.f.write_u32(v)?;
+        self.f.write_char(']')?;
+        self.f.write_char('{')?;
+        self.f.write_reg(mask_reg)?;
+        self.f.write_char('}')?;
+        Ok(())
+    }
+    fn visit_absolute_far_address(&mut self, segment: u16, address: u32) -> Result<Self::Ok, Self::Error> {
+        self.f.write_prefixed_u16(segment)?;
+        self.f.write_fixed_size(":")?;
+        self.f.write_prefixed_u32(address)?;
+        Ok(())
+    }
+
+
+    fn visit_other(&mut self) -> Result<Self::Ok, Self::Error> {
+        Ok(())
     }
 }
 
