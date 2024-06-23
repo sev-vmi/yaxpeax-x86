@@ -40,7 +40,13 @@ lto = true
 default = ["std", "colors", "use-serde", "fmt"]
 
 # opt-in for some apis that are really much nicer with String
-std = ["yaxpeax-arch/std"]
+std = ["alloc", "yaxpeax-arch/std"]
+
+# opt-in for some formatting-related helpers that require performing allocation
+#
+# this should only be useful with `fmt` currently, but in the future there could
+# be other `fmt`-independent code gated on `alloc`.
+alloc = ["yaxpeax-arch/alloc"]
 
 # feature for formatting instructions and their components
 fmt = []

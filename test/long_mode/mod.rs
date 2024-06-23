@@ -92,9 +92,12 @@ fn test_display_under(decoder: &InstDecoder, data: &[u8], expected: &'static str
                         text,
                     );
 
+                    #[cfg(feature="alloc")]
                     let mut formatter = yaxpeax_x86::long_mode::InstructionTextBuffer::new();
+                    #[cfg(feature="alloc")]
                     let text3 = formatter.format_inst(&instr.display_with(yaxpeax_x86::long_mode::DisplayStyle::Intel)).expect("printing succeeds");
 
+                    #[cfg(feature="alloc")]
                     assert!(
                         text3 == text,
                         "display error through InstructionTextBuffer for {}:\n  decoded: {:?} under decoder {}\n displayed: {}\n expected: {}\n",
