@@ -7529,11 +7529,8 @@ fn read_operands<
                     .with_id(modrm_start - 8)
             );
             if instruction.operands[0] == OperandSpec::RegMMM {
-                if opcode == Opcode::CALL || opcode == Opcode::JMP {
-                    instruction.regs[1].bank = RegisterBank::D;
-                    if opcode == Opcode::CALL {
-                        instruction.mem_size = 4;
-                    }
+                if opcode == Opcode::CALL {
+                    instruction.mem_size = 4;
                 } else if opcode == Opcode::PUSH || opcode == Opcode::POP {
                     if instruction.prefixes.operand_size() {
                         instruction.mem_size = 2;

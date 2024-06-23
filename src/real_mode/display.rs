@@ -2797,9 +2797,8 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::St
     }
 }
 
-// TODO: should include CALL
-static RELATIVE_BRANCHES: [Opcode; 21] = [
-    Opcode::JMP, Opcode::JCXZ,
+static RELATIVE_BRANCHES: [Opcode; 22] = [
+    Opcode::JMP, Opcode::CALL, Opcode::JCXZ,
     Opcode::LOOP, Opcode::LOOPZ, Opcode::LOOPNZ,
     Opcode::JO, Opcode::JNO,
     Opcode::JB, Opcode::JNB,

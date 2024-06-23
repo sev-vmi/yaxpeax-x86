@@ -7660,6 +7660,8 @@ fn read_operands<
                     .with_id(modrm_start - 8)
             );
             if instruction.operands[0] == OperandSpec::RegMMM {
+                // in 64-bit mode, operand size overrides do not actually shink the operand for
+                // `call`/`jmp`.
                 if opcode == Opcode::CALL || opcode == Opcode::JMP {
                     instruction.regs[1].bank = RegisterBank::Q;
                     if opcode == Opcode::CALL {
