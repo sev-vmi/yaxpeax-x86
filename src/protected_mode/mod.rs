@@ -2676,7 +2676,7 @@ enum OperandSpec {
     RegIndexBaseScale_mask = 0xd6,
     RegIndexBaseScaleDisp_mask = 0xd7,
     // u16:u{16,32} immediate address for a far call
-    AbsoluteFarAddress = 0x98,
+    AbsoluteFarAddress = 0x18,
 }
 
 // the Hash, Eq, and PartialEq impls here are possibly misleading.
