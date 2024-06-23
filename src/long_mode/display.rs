@@ -2,11 +2,11 @@ use core::fmt;
 
 use yaxpeax_arch::{Colorize, ShowContextual, NoColors, YaxColors};
 
-use crate::safer_unchecked::GetSaferUnchecked as _;
 use crate::MEM_SIZE_STRINGS;
 use crate::long_mode::{RegSpec, Opcode, Operand, MergeMode, InstDecoder, Instruction, Segment, PrefixRex, OperandSpec};
 
 use yaxpeax_arch::display::DisplaySink;
+use yaxpeax_arch::safer_unchecked::GetSaferUnchecked as _;
 
 trait DisplaySinkExt {
     // `write_opcode` depends on all mnemonics being less than 32 bytes long. check that here, at
