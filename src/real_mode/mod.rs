@@ -12,11 +12,11 @@ pub use self::display::{DisplayStyle, InstructionDisplayer};
 pub use self::display::InstructionTextBuffer;
 
 use core::cmp::PartialEq;
-use crate::safer_unchecked::unreachable_kinda_unchecked as unreachable_unchecked;
 
 use yaxpeax_arch::{AddressDiff, Decoder, Reader, LengthedInstruction};
 use yaxpeax_arch::annotation::{AnnotatingDecoder, DescriptionSink, NullSink};
 use yaxpeax_arch::{DecodeError as ArchDecodeError};
+use yaxpeax_arch::safer_unchecked::unreachable_kinda_unchecked as unreachable_unchecked;
 
 use core::fmt;
 impl fmt::Display for DecodeError {
