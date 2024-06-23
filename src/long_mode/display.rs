@@ -1,5 +1,7 @@
 use core::fmt;
 
+// allowing these deprecated items for the time being, not yet breaking yaxpeax-x86 apis
+#[allow(deprecated)]
 use yaxpeax_arch::{Colorize, ShowContextual, NoColors, YaxColors};
 
 use crate::MEM_SIZE_STRINGS;
@@ -254,10 +256,14 @@ impl fmt::Display for RegSpec {
 
 impl fmt::Display for Operand {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        // to reuse one implementation, call the deprecated function for now.
+        #[allow(deprecated)]
         self.colorize(&NoColors, fmt)
     }
 }
 
+// allowing these deprecated items for the time being, not yet breaking yaxpeax-x86 apis
+#[allow(deprecated)]
 impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for Operand {
     fn colorize(&self, _colors: &Y, f: &mut T) -> fmt::Result {
         let mut f = yaxpeax_arch::display::FmtSink::new(f);
@@ -2134,8 +2140,18 @@ impl Opcode {
     }
 }
 
+// allowing these deprecated items for the time being, not yet breaking yaxpeax-x86 apis
+#[allow(deprecated)]
 impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for Opcode {
-    fn colorize(&self, colors: &Y, out: &mut T) -> fmt::Result {
+    fn colorize(&self, _colors: &Y, out: &mut T) -> fmt::Result {
+        out.write_str(self.name())
+        // a way to preserve opcode colorization might be to see entering an opcode span,
+        // collecting text into a buffer, waiting for the span to exit, looking that up in a map
+        // for opcode types, and then picking a color. this really should be something like "opcode
+        // information" that can be looked up (including things like operand read/write behavior)..
+        //
+        // leaving this commented out as a reminder of what opcode to behavior mapping was like
+        /*
         match self {
             Opcode::VGF2P8AFFINEQB |
             Opcode::VGF2P8AFFINEINVQB |
@@ -3561,17 +3577,22 @@ impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for Opcode {
             Opcode::UD2 |
             Opcode::Invalid => { write!(out, "{}", colors.invalid_op(self)) }
         }
+        */
     }
 }
 
 impl fmt::Display for Instruction {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        // to reuse one implementation, call the deprecated function for now.
+        #[allow(deprecated)]
         self.display_with(DisplayStyle::Intel).colorize(&NoColors, fmt)
     }
 }
 
 impl<'instr> fmt::Display for InstructionDisplayer<'instr> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        // to reuse one implementation, call the deprecated function for now.
+        #[allow(deprecated)]
         self.colorize(&NoColors, fmt)
     }
 }
@@ -3618,6 +3639,8 @@ pub struct InstructionDisplayer<'instr> {
  * UPDATE: really wish i thought of DisplaySink back then, really wish this was bounded as T:
  * DisplaySink.
  */
+// allowing these deprecated items for the time being, not yet breaking yaxpeax-x86 apis
+#[allow(deprecated)]
 impl <'instr, T: fmt::Write, Y: YaxColors> Colorize<T, Y> for InstructionDisplayer<'instr> {
     fn colorize(&self, colors: &Y, out: &mut T) -> fmt::Result {
         // TODO: I DONT LIKE THIS, there is no address i can give contextualize here,
@@ -4129,6 +4152,8 @@ pub(crate) fn contextualize_c<T: DisplaySink>(instr: &Instruction, out: &mut T) 
     Ok(())
 }
 
+// allowing these deprecated items for the time being, not yet breaking yaxpeax-x86 apis
+#[allow(deprecated)]
 impl <'instr, T: fmt::Write, Y: YaxColors> ShowContextual<u64, NoContext, T, Y> for InstructionDisplayer<'instr> {
     fn contextualize(&self, _colors: &Y, _address: u64, _context: Option<&NoContext>, out: &mut T) -> fmt::Result {
         let InstructionDisplayer {
@@ -4149,6 +4174,8 @@ impl <'instr, T: fmt::Write, Y: YaxColors> ShowContextual<u64, NoContext, T, Y> 
     }
 }
 
+// allowing these deprecated items for the time being, not yet breaking yaxpeax-x86 apis
+#[allow(deprecated)]
 #[cfg(feature="std")]
 impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::String>], T, Y> for Instruction {
     fn contextualize(&self, colors: &Y, _address: u64, context: Option<&[Option<alloc::string::String>]>, out: &mut T) -> fmt::Result {
@@ -4161,7 +4188,7 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::St
         }
 
         if self.prefixes.rep_any() {
-            if [Opcode::MOVS, Opcode::CMPS, Opcode::LODS, Opcode::STOS, Opcode::INS, Opcode::OUTS].contains(&self.opcode) {
+            if self.opcode.can_rep() {
                 // only a few of you actually use the prefix...
                 if self.prefixes.rep() {
                     write!(out, "rep ")?;
