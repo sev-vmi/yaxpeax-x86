@@ -296,7 +296,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         let mut v = imm as u8;
         if imm < 0 {
             self.f.write_char('-')?;
-            v = -imm as u8;
+            v = imm.unsigned_abs();
         }
         self.f.write_fixed_size("0x")?;
         self.f.write_u8(v)?;
@@ -317,7 +317,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         let mut v = imm as u16;
         if imm < 0 {
             self.f.write_char('-')?;
-            v = -imm as u16;
+            v = imm.unsigned_abs();
         }
         self.f.write_fixed_size("0x")?;
         self.f.write_u16(v)?;
@@ -337,7 +337,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         let mut v = imm as u32;
         if imm < 0 {
             self.f.write_char('-')?;
-            v = -imm as u32;
+            v = imm.unsigned_abs();
         }
         self.f.write_fixed_size("0x")?;
         self.f.write_u32(v)?;
@@ -358,7 +358,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         let mut v = imm as u64;
         if imm < 0 {
             self.f.write_char('-')?;
-            v = -imm as u64;
+            v = imm.unsigned_abs();
         }
         self.f.write_fixed_size("0x")?;
         self.f.write_u64(v)?;
@@ -4287,7 +4287,7 @@ impl<'a, F: DisplaySink> super::OperandVisitor for RelativeBranchPrinter<'a, F> 
             if rel < 0 {
                 self.out.write_char('-')?;
                 //danger_anguished_string_write(&mut self.out, "-");
-                v = -rel as u8;
+                v = rel.unsigned_abs();
             } else {
                 self.out.write_char('+')?;
                 // danger_anguished_string_write(&mut self.out, "+");
@@ -4308,7 +4308,7 @@ impl<'a, F: DisplaySink> super::OperandVisitor for RelativeBranchPrinter<'a, F> 
             if rel < 0 {
                 self.out.write_char('-')?;
                 // danger_anguished_string_write(&mut self.out, "-");
-                v = -rel as u32;
+                v = rel.unsigned_abs();
             } else {
                 self.out.write_char('+')?;
                 // danger_anguished_string_write(&mut self.out, "+");
