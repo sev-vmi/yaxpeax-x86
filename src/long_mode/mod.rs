@@ -4429,7 +4429,7 @@ impl Instruction {
     /// if the work you expect to do per-operand is very small, constructing an `Operand` and
     /// dispatching on tags may be a substantial factor of overall runtime. `visit_operand` can
     /// reduce total overhead in such cases.
-    #[cfg_attr(features="profiling", inline(never))]
+    #[cfg_attr(feature="profiling", inline(never))]
     fn visit_operand<T: OperandVisitor>(&self, i: u8, visitor: &mut T) -> Result<T::Ok, T::Error> {
         assert!(i < 4);
         let spec = self.operands[i as usize];
