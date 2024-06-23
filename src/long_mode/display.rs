@@ -439,7 +439,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
             let mut v = disp as u32;
             if disp < 0 {
                 self.f.write_fixed_size("- 0x")?;
-                v = -disp as u32;
+                v = disp.unsigned_abs();
             } else {
                 self.f.write_fixed_size("+ 0x")?;
             }
@@ -472,7 +472,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
             let mut v = disp as u32;
             if disp < 0 {
                 self.f.write_fixed_size("- 0x")?;
-                v = -disp as u32;
+                v = disp.unsigned_abs();
             } else {
                 self.f.write_fixed_size("+ 0x")?;
             }
@@ -502,7 +502,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
             let mut v = disp as u32;
             if disp < 0 {
                 self.f.write_fixed_size("- 0x")?;
-                v = -disp as u32;
+                v = disp.unsigned_abs();
             } else {
                 self.f.write_fixed_size("+ 0x")?;
             }
@@ -517,7 +517,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         let mut v = disp as u32;
         if disp < 0 {
             self.f.write_fixed_size("- 0x")?;
-            v = -disp as u32;
+            v = disp.unsigned_abs();
         } else {
             self.f.write_fixed_size("+ 0x")?;
         }
@@ -557,7 +557,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         let mut v = disp as u32;
         if disp < 0 {
             self.f.write_fixed_size("- 0x")?;
-            v = -disp as u32;
+            v = disp.unsigned_abs();
         } else {
             self.f.write_fixed_size("+ 0x")?;
         }
@@ -588,7 +588,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         let mut v = disp as u32;
         if disp < 0 {
             self.f.write_fixed_size("- 0x")?;
-            v = -disp as u32;
+            v = disp.unsigned_abs();
         } else {
             self.f.write_fixed_size("+ 0x")?;
         }
@@ -623,7 +623,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         let mut v = disp as u32;
         if disp < 0 {
             self.f.write_fixed_size("- 0x")?;
-            v = -disp as u32;
+            v = disp.unsigned_abs();
         } else {
             self.f.write_fixed_size("+ 0x")?;
         }
