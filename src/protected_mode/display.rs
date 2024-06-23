@@ -2834,15 +2834,12 @@ impl<'a, F: DisplaySink> super::OperandVisitor for RelativeBranchPrinter<'a, F> 
     fn visit_i8(&mut self, rel: i8) -> Result<Self::Ok, Self::Error> {
         if RELATIVE_BRANCHES.contains(&self.inst.opcode) {
             self.out.write_char('$')?;
-            // danger_anguished_string_write(self.out, "$");
             let mut v = rel as u8;
             if rel < 0 {
                 self.out.write_char('-')?;
-                //danger_anguished_string_write(&mut self.out, "-");
                 v = rel.unsigned_abs();
             } else {
                 self.out.write_char('+')?;
-                // danger_anguished_string_write(&mut self.out, "+");
             }
             self.out.write_fixed_size("0x")?;
             self.out.write_u8(v)?;
@@ -2855,15 +2852,12 @@ impl<'a, F: DisplaySink> super::OperandVisitor for RelativeBranchPrinter<'a, F> 
     fn visit_i32(&mut self, rel: i32) -> Result<Self::Ok, Self::Error> {
         if RELATIVE_BRANCHES.contains(&self.inst.opcode) || self.inst.opcode == Opcode::XBEGIN {
             self.out.write_char('$')?;
-            // danger_anguished_string_write(self.out, "$");
             let mut v = rel as u32;
             if rel < 0 {
                 self.out.write_char('-')?;
-                // danger_anguished_string_write(&mut self.out, "-");
                 v = rel.unsigned_abs();
             } else {
                 self.out.write_char('+')?;
-                // danger_anguished_string_write(&mut self.out, "+");
             }
             self.out.write_fixed_size("0x")?;
             self.out.write_u32(v)?;
