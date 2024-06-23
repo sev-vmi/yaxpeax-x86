@@ -5965,7 +5965,7 @@ const OPCODES: [OpcodeRecord; 256] = [
 
 #[allow(non_snake_case)]
 #[cfg_attr(feature="profiling", inline(never))]
-#[cfg_attr(not(feature="profiling"), inline(never))]
+#[cfg_attr(not(feature="profiling"), inline(always))]
 pub(self) fn read_E<
     T: Reader<<Arch as yaxpeax_arch::Arch>::Address, <Arch as yaxpeax_arch::Arch>::Word>,
     S: DescriptionSink<FieldDescription>,
@@ -6755,7 +6755,7 @@ fn read_opc_hotpath<
 }
 
 #[cfg_attr(feature="profiling", inline(never))]
-#[cfg_attr(not(feature="profiling"), inline(never))]
+#[cfg_attr(not(feature="profiling"), inline(always))]
 fn read_with_annotations<
     T: Reader<<Arch as yaxpeax_arch::Arch>::Address, <Arch as yaxpeax_arch::Arch>::Word>,
     S: DescriptionSink<FieldDescription>,
@@ -6917,7 +6917,7 @@ fn read_with_annotations<
 }
 
 #[cfg_attr(feature="profiling", inline(never))]
-#[cfg_attr(not(feature="profiling"), inline(never))]
+#[cfg_attr(not(feature="profiling"), inline(always))]
 fn read_operands<
     T: Reader<<Arch as yaxpeax_arch::Arch>::Address, <Arch as yaxpeax_arch::Arch>::Word>,
     S: DescriptionSink<FieldDescription>
