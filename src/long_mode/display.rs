@@ -8,6 +8,102 @@ use crate::long_mode::{RegSpec, Opcode, Operand, MergeMode, InstDecoder, Instruc
 
 use yaxpeax_arch::display::DisplaySink;
 
+trait DisplaySinkExt {
+    // `write_opcode` depends on all mnemonics being less than 32 bytes long. check that here, at
+    // compile time. referenced later to force evaluation of this const.
+    const MNEMONIC_LT_32: () = {
+        let mut i = 0;
+        while i < MNEMONICS.len() {
+            let name = &MNEMONICS[i];
+            if name.len() >= 32 {
+                panic!("mnemonic too long");
+            }
+            i += 1;
+        }
+    };
+
+    // `write_reg` depends on all register names being less than 8 bytes long. check that here, at
+    // compile time. referenced later to force evaluation of this const.
+    const REG_LABEL_LT_8: () = {
+        let mut i = 0;
+        while i < REG_NAMES.len() {
+            let name = &REG_NAMES[i];
+            if name.len() >= 8 {
+                panic!("register name too long");
+            }
+            i += 1;
+        }
+    };
+
+    // `write_mem_size_label` depends on all memory size labels being less than 8 bytes long. check
+    // that here, at compile time. referenced later to force evaluation of this const.
+    const MEM_SIZE_LABEL_LT_8: () = {
+        let mut i = 0;
+        while i < crate::MEM_SIZE_STRINGS.len() {
+            let name = &MEM_SIZE_STRINGS[i];
+            if name.len() >= 8 {
+                panic!("memory label name too long");
+            }
+            i += 1;
+        }
+    };
+
+    // `write_sae_mode` depends on all sae mode labels being less than 16 bytes long. check that
+    // here, at compile time. referenced later to force evaluation of this const.
+    const SAE_LABEL_LT_16: () = {
+        let mut i = 0;
+        while i < super::SAE_MODES.len() {
+            let mode = &super::SAE_MODES[i];
+            if mode.label().len() >= 16 {
+                panic!("sae mode label too long");
+            }
+            i += 1;
+        }
+    };
+
+    fn write_opcode(&mut self, opcode: super::Opcode) -> Result<(), core::fmt::Error>;
+    fn write_reg(&mut self, reg: RegSpec) -> Result<(), core::fmt::Error>;
+    fn write_mem_size_label(&mut self, mem_size: u8) -> Result<(), core::fmt::Error>;
+    fn write_sae_mode(&mut self, sae: super::SaeMode) -> Result<(), core::fmt::Error>;
+}
+
+impl<T: DisplaySink> DisplaySinkExt for T {
+    #[inline(always)]
+    fn write_opcode(&mut self, opcode: super::Opcode) -> Result<(), core::fmt::Error> {
+        let name = opcode.name();
+
+        let _ = Self::MNEMONIC_LT_32;
+        // Safety: all opcode mnemonics are 31 bytes or fewer.
+        unsafe { self.write_lt_32(name) }
+    }
+
+    #[inline(always)]
+    fn write_reg(&mut self, reg: RegSpec) -> Result<(), core::fmt::Error> {
+        let label = regspec_label(&reg);
+
+        let _ = Self::REG_LABEL_LT_8;
+        // Safety: all register labels are 7 bytes or fewer.
+        unsafe { self.write_lt_8(label) }
+    }
+
+    #[inline(always)]
+    fn write_mem_size_label(&mut self, mem_size: u8) -> Result<(), core::fmt::Error> {
+        let label = mem_size_label(mem_size);
+        let _ = Self::MEM_SIZE_LABEL_LT_8;
+        // Safety: all memory size labels are 7 bytes or fewer
+        unsafe { self.write_lt_8(label) }
+    }
+
+    #[inline(always)]
+    fn write_sae_mode(&mut self, sae_mode: super::SaeMode) -> Result<(), core::fmt::Error> {
+        let label = sae_mode.label();
+
+        let _ = Self::SAE_LABEL_LT_16;
+        // Safety: all sae labels are 15 bytes or fewer.
+        unsafe { self.write_lt_16(label) }
+    }
+}
+
 impl fmt::Display for InstDecoder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self == &InstDecoder::default() {
@@ -266,18 +362,18 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for DisplayingOperandVisi
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_reg(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.span_start_register();
-        unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
+        self.f.write_reg(reg)?;
         self.f.span_end_register();
         Ok(())
     }
     fn visit_reg_mask_merge(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
         self.f.span_start_register();
-        unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
+        self.f.write_reg(spec)?;
         self.f.span_end_register();
         if mask.num != 0 {
             self.f.write_fixed_size("{")?;
             self.f.span_start_register();
-            unsafe { self.f.write_lt_8(regspec_label(&mask))?; }
+            self.f.write_reg(mask)?;
             self.f.span_end_register();
             self.f.write_fixed_size("}")?;
         }
@@ -287,23 +383,23 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for DisplayingOperandVisi
         Ok(())
     }
     fn visit_reg_mask_merge_sae(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode, sae_mode: crate::long_mode::SaeMode) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
+        self.f.write_reg(spec)?;
         if mask.num != 0 {
             self.f.write_fixed_size("{")?;
-            unsafe { self.f.write_lt_8(regspec_label(&mask))?; }
+            self.f.write_reg(mask)?;
             self.f.write_fixed_size("}")?;
         }
         if let MergeMode::Zero = merge_mode {
             self.f.write_fixed_size("{z}")?;
         }
-        unsafe { self.f.write_lt_16(sae_mode.label())?; }
+        self.f.write_sae_mode(sae_mode)?;
         Ok(())
     }
     fn visit_reg_mask_merge_sae_noround(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
-        unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
+        self.f.write_reg(spec)?;
         if mask.num != 0 {
             self.f.write_fixed_size("{")?;
-            unsafe { self.f.write_lt_8(regspec_label(&mask))?; }
+            self.f.write_reg(mask)?;
             self.f.write_fixed_size("}")?;
         }
         if let MergeMode::Zero = merge_mode {
@@ -330,7 +426,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for DisplayingOperandVisi
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_disp(&mut self, reg: RegSpec, disp: i32) -> Result<Self::Ok, Self::Error> {
         self.f.write_char('[')?;
-        unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
+        self.f.write_reg(reg)?;
         self.f.write_fixed_size(" ")?;
 
         {
@@ -347,12 +443,12 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for DisplayingOperandVisi
     }
     fn visit_deref(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
+        self.f.write_reg(reg)?;
         self.f.write_fixed_size("]")
     }
     fn visit_reg_scale(&mut self, reg: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
+        self.f.write_reg(reg)?;
         self.f.write_fixed_size(" * ")?;
         self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
         self.f.write_fixed_size("]")?;
@@ -361,7 +457,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for DisplayingOperandVisi
     }
     fn visit_reg_scale_disp(&mut self, reg: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        unsafe { self.f.write_lt_8(regspec_label(&reg))?; }
+        self.f.write_reg(reg)?;
         self.f.write_fixed_size(" * ")?;
         self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
         self.f.write_fixed_size(" ")?;
@@ -380,18 +476,18 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for DisplayingOperandVisi
     }
     fn visit_index_base_scale(&mut self, base: RegSpec, index: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        unsafe { self.f.write_lt_8(regspec_label(&base))?; }
+        self.f.write_reg(base)?;
         self.f.write_fixed_size(" + ")?;
-        unsafe { self.f.write_lt_8(regspec_label(&index))?; }
+        self.f.write_reg(index)?;
         self.f.write_fixed_size(" * ")?;
         self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
         self.f.write_fixed_size("]")
     }
     fn visit_index_base_scale_disp(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        unsafe { self.f.write_lt_8(regspec_label(&base))?; }
+        self.f.write_reg(base)?;
         self.f.write_fixed_size(" + ")?;
-        unsafe { self.f.write_lt_8(regspec_label(&index))?; }
+        self.f.write_reg(index)?;
         self.f.write_fixed_size(" * ")?;
         self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
         self.f.write_fixed_size(" ")?;
@@ -410,7 +506,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for DisplayingOperandVisi
     }
     fn visit_reg_disp_masked(&mut self, spec: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_char('[')?;
-        unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
+        self.f.write_reg(spec)?;
         self.f.write_char(' ')?;
         let mut v = disp as u32;
         if disp < 0 {
@@ -422,33 +518,33 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for DisplayingOperandVisi
         self.f.write_u32(v)?;
         self.f.write_char(']')?;
         self.f.write_char('{')?;
-        unsafe { self.f.write_lt_8(regspec_label(&mask_reg))?; }
+        self.f.write_reg(mask_reg)?;
         self.f.write_char('}')?;
         Ok(())
     }
     fn visit_reg_deref_masked(&mut self, spec: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
+        self.f.write_reg(spec)?;
         self.f.write_fixed_size("]")?;
         self.f.write_char('{')?;
-        unsafe { self.f.write_lt_8(regspec_label(&mask_reg))?; }
+        self.f.write_reg(mask_reg)?;
         self.f.write_char('}')?;
         Ok(())
     }
     fn visit_reg_scale_masked(&mut self, spec: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
+        self.f.write_reg(spec)?;
         self.f.write_fixed_size(" * ")?;
         self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
         self.f.write_fixed_size("]")?;
         self.f.write_char('{')?;
-        unsafe { self.f.write_lt_8(regspec_label(&mask_reg))?; }
+        self.f.write_reg(mask_reg)?;
         self.f.write_char('}')?;
         Ok(())
     }
     fn visit_reg_scale_disp_masked(&mut self, spec: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        unsafe { self.f.write_lt_8(regspec_label(&spec))?; }
+        self.f.write_reg(spec)?;
         self.f.write_fixed_size(" * ")?;
         self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
         self.f.write_fixed_size(" ")?;
@@ -462,26 +558,26 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for DisplayingOperandVisi
         self.f.write_u32(v)?;
         self.f.write_char(']')?;
         self.f.write_char('{')?;
-        unsafe { self.f.write_lt_8(regspec_label(&mask_reg))?; }
+        self.f.write_reg(mask_reg)?;
         self.f.write_char('}')?;
         Ok(())
     }
     fn visit_index_base_masked(&mut self, base: RegSpec, index: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        unsafe { self.f.write_lt_8(regspec_label(&base))?; }
+        self.f.write_reg(base)?;
         self.f.write_fixed_size(" + ")?;
-        unsafe { self.f.write_lt_8(regspec_label(&index))?; }
+        self.f.write_reg(index)?;
         self.f.write_fixed_size("]")?;
         self.f.write_char('{')?;
-        unsafe { self.f.write_lt_8(regspec_label(&mask_reg))?; }
+        self.f.write_reg(mask_reg)?;
         self.f.write_char('}')?;
         Ok(())
     }
     fn visit_index_base_disp_masked(&mut self, base: RegSpec, index: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        unsafe { self.f.write_lt_8(regspec_label(&base))?; }
+        self.f.write_reg(base)?;
         self.f.write_fixed_size(" + ")?;
-        unsafe { self.f.write_lt_8(regspec_label(&index))?; }
+        self.f.write_reg(index)?;
         self.f.write_fixed_size(" ")?;
         let mut v = disp as u32;
         if disp < 0 {
@@ -493,28 +589,28 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for DisplayingOperandVisi
         self.f.write_u32(v)?;
         self.f.write_char(']')?;
         self.f.write_char('{')?;
-        unsafe { self.f.write_lt_8(regspec_label(&mask_reg))?; }
+        self.f.write_reg(mask_reg)?;
         self.f.write_char('}')?;
         Ok(())
     }
     fn visit_index_base_scale_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        unsafe { self.f.write_lt_8(regspec_label(&base))?; }
+        self.f.write_reg(base)?;
         self.f.write_fixed_size(" + ")?;
-        unsafe { self.f.write_lt_8(regspec_label(&index))?; }
+        self.f.write_reg(index)?;
         self.f.write_fixed_size(" * ")?;
         self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
         self.f.write_fixed_size("]")?;
         self.f.write_char('{')?;
-        unsafe { self.f.write_lt_8(regspec_label(&mask_reg))?; }
+        self.f.write_reg(mask_reg)?;
         self.f.write_char('}')?;
         Ok(())
     }
     fn visit_index_base_scale_disp_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        unsafe { self.f.write_lt_8(regspec_label(&base))?; }
+        self.f.write_reg(base)?;
         self.f.write_fixed_size(" + ")?;
-        unsafe { self.f.write_lt_8(regspec_label(&index))?; }
+        self.f.write_reg(index)?;
         self.f.write_fixed_size(" * ")?;
         self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
         self.f.write_char(' ')?;
@@ -528,7 +624,7 @@ impl <T: DisplaySink> crate::long_mode::OperandVisitor for DisplayingOperandVisi
         self.f.write_u32(v)?;
         self.f.write_char(']')?;
         self.f.write_char('{')?;
-        unsafe { self.f.write_lt_8(regspec_label(&mask_reg))?; }
+        self.f.write_reg(mask_reg)?;
         self.f.write_char('}')?;
         Ok(())
     }
@@ -3571,8 +3667,7 @@ pub(crate) fn contextualize_intel<T: DisplaySink>(instr: &Instruction, out: &mut
         }
     }
 
-    // TODO: no x86 instruction longer than 32 bytes?
-    unsafe { out.write_lt_32(instr.opcode.name())? };
+    out.write_opcode(instr.opcode)?;
 
     if instr.operand_count > 0 {
         out.write_fixed_size(" ")?;
@@ -3585,7 +3680,7 @@ pub(crate) fn contextualize_intel<T: DisplaySink>(instr: &Instruction, out: &mut
         }
 
         if instr.operands[0 as usize].is_memory() {
-            unsafe { out.write_lt_8(mem_size_label(instr.mem_size))? };
+            out.write_mem_size_label(instr.mem_size)?;
             if let Some(prefix) = instr.segment_override_for_op(0) {
                 let name = prefix.name();
                 out.write_char(' ')?;
@@ -3611,7 +3706,7 @@ pub(crate) fn contextualize_intel<T: DisplaySink>(instr: &Instruction, out: &mut
             }
 
             if instr.operands[i as usize].is_memory() {
-                unsafe { out.write_lt_8(mem_size_label(instr.mem_size))? };
+                out.write_mem_size_label(instr.mem_size)?;
                 if i >= 4 {
                     unsafe { core::hint::unreachable_unchecked(); }
                 }

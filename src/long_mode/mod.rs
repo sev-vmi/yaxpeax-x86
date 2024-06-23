@@ -523,7 +523,7 @@ impl SaeMode {
     /// assert_eq!(SaeMode::RoundUp.label(), "{ru-sae}");
     /// assert_eq!(SaeMode::RoundZero.label(), "{rz-sae}");
     /// ```
-    pub fn label(&self) -> &'static str {
+    pub const fn label(&self) -> &'static str {
         match self {
             SaeMode::RoundNearest => "{rne-sae}",
             SaeMode::RoundDown => "{rd-sae}",
