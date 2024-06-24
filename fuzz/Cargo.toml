@@ -10,6 +10,8 @@ cargo-fuzz = true
 
 [dependencies.yaxpeax-x86]
 path = ".."
+[dependencies.yaxpeax-arch]
+version = "0.3.1"
 [dependencies.libfuzzer-sys]
 git = "https://github.com/rust-fuzz/libfuzzer-sys.git"
 
@@ -24,6 +26,12 @@ path = "fuzz_targets/decode_does_not_panic.rs"
 [[bin]]
 name = "display_does_not_panic"
 path = "fuzz_targets/display_does_not_panic.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "displaysink_used_correctly"
+path = "fuzz_targets/displaysink_used_correctly.rs"
 test = false
 doc = false
 

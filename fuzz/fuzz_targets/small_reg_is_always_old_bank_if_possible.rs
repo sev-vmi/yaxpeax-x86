@@ -12,8 +12,8 @@ extern crate yaxpeax_x86;
 // cases. leaving them in for fuzz targets to match other cases, and In Case Of Future Change.
 fuzz_target!(|data: &[u8]| {
     let x86_64_decoder = yaxpeax_x86::long_mode::InstDecoder::default();
-    let x86_32_decoder = yaxpeax_x86::protected_mode::InstDecoder::default();
-    let x86_16_decoder = yaxpeax_x86::real_mode::InstDecoder::default();
+    // let x86_32_decoder = yaxpeax_x86::protected_mode::InstDecoder::default();
+    // let x86_16_decoder = yaxpeax_x86::real_mode::InstDecoder::default();
 
     if let Ok(inst) = x86_64_decoder.decode_slice(data) {
         for i in 0..inst.operand_count() {
