@@ -931,7 +931,7 @@ const REGISTER_CLASS_NAMES: &[&'static str] = &[
 ///
 /// if let Operand::Register { reg } = instruction.operand(1) {
 ///     #[cfg(feature="fmt")]
-///     println!("first operand is {}", reg);
+///     println!("second operand is {}", reg);
 ///     show_register_class_info(reg.class());
 /// }
 /// ```
