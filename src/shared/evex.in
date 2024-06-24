@@ -173,7 +173,7 @@ pub(crate) fn read_evex<
     let opc = words.next().ok().ok_or(DecodeError::ExhaustedInput)?;
     let table_idx = ((m << 2) | p) as usize;
     let table = generated::TABLES[table_idx];
-    if table as *const [_]  == &generated::DUMMY[..] as *const [_] {
+    if core::ptr::eq(table as *const [_], &generated::DUMMY[..] as *const [_]) {
         return Err(DecodeError::InvalidOpcode);
     }
     let mut index_lower = 0;
