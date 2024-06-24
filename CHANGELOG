@@ -1,5 +1,7 @@
 ## 1.3.0
 
+* upgrade to `yaxpeax-arch 0.3.1`, which brings with it a deprecation of the
+  `Colorize` and `ShowContextual` traits.
 * fix 32-bit call/jmp not respecting 66 prefix if set - such cases use 16-bit
   operands, but decoded as if they used 32-bit operands.
 
