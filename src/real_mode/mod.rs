@@ -741,7 +741,8 @@ impl Operand {
 
     /// provided for parity with [`Instruction::visit_operand`]. this has little utility other than
     /// to reuse an `OperandVisitor` on an `Operand` directly.
-    pub fn visit<T: OperandVisitor>(&self, visitor: &mut T) -> Result<T::Ok, T::Error> {
+    #[allow(dead_code)] // in some configurations this is unused, but it is internal-only for now, so it would warn.
+    fn visit<T: OperandVisitor>(&self, visitor: &mut T) -> Result<T::Ok, T::Error> {
         match self {
             Operand::Nothing => {
                 visitor.visit_other()
@@ -4309,6 +4310,7 @@ impl Opcode {
     }
 
     #[inline(always)]
+    #[allow(dead_code)] // in some configurations this is unused, but it is internal-only for now, so it would warn.
     fn can_rep(&self) -> bool {
         (*self as u32) & 0x2000 != 0
     }
@@ -4334,7 +4336,8 @@ impl Instruction {
         Operand::from_spec(self, self.operands[i as usize])
     }
 
-    /// TODO: make public, document, etc...
+    // TODO: make public when this seems stable and worthwhile. currently only used for display
+    // and Displaysink etc..
     ///
     /// `visit_operand` allows code using operands to better specialize and inline with the logic
     /// that would construct an [`Operand`] variant, without having to necessarily construct an
@@ -4344,8 +4347,8 @@ impl Instruction {
     /// dispatching on tags may be a substantial factor of overall runtime. `visit_operand` can
     /// reduce total overhead in such cases.
     #[cfg_attr(feature="profiling", inline(never))]
+    #[allow(dead_code)] // in some configurations this is unused, but it is internal-only for now, so it would warn.
     fn visit_operand<T: OperandVisitor>(&self, i: u8, visitor: &mut T) -> Result<T::Ok, T::Error> {
-        assert!(i < 4);
         let spec = self.operands[i as usize];
         match spec {
             OperandSpec::Nothing => {

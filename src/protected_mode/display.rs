@@ -5,7 +5,7 @@ use core::fmt;
 use yaxpeax_arch::{Colorize, ShowContextual, NoColors, YaxColors};
 
 use crate::MEM_SIZE_STRINGS;
-use crate::protected_mode::{RegSpec, Opcode, Operand, MergeMode, InstDecoder, Instruction, Segment, PrefixVex, OperandSpec};
+use crate::protected_mode::{RegSpec, Opcode, Operand, MergeMode, InstDecoder, Instruction, Segment, PrefixVex};
 
 use yaxpeax_arch::display::DisplaySink;
 use yaxpeax_arch::safer_unchecked::GetSaferUnchecked as _;
@@ -2758,7 +2758,7 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::St
             Some(s) => { write!(out, " {}", s)?; },
             None => {
                 match self.operands[0] {
-                    OperandSpec::Nothing => {
+                    super::OperandSpec::Nothing => {
                         return Ok(());
                     },
                     _ => {
@@ -2778,7 +2778,7 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, [Option<alloc::string::St
                 Some(s) => { write!(out, ", {}", s)? }
                 None => {
                     match &self.operands[i] {
-                        &OperandSpec::Nothing => {
+                        &super::OperandSpec::Nothing => {
                             return Ok(());
                         },
                         _ => {
