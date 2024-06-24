@@ -36,6 +36,12 @@ test = false
 doc = false
 
 [[bin]]
+name = "instruction_text_buffer_size_ok"
+path = "fuzz_targets/instruction_text_buffer_size_ok.rs"
+test = false
+doc = false
+
+[[bin]]
 name = "display_c_does_not_panic"
 path = "fuzz_targets/display_c_does_not_panic.rs"
 test = false

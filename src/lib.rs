@@ -138,6 +138,42 @@ pub use protected_mode::Arch as x86_32;
 pub mod real_mode;
 pub use real_mode::Arch as x86_16;
 
+// this exists to size `InstructionTextBuffer`'s buffer. it ideally would come from an `Arch`
+// impl, or something related to `Arch`, but i'm not yet sure how to wire that up into
+// yaxpeax-arch. so instead calculate an appropriate max size for all of 16-bit/32-bit/64-bit
+// instruction printing that `InstructionTextBuffer` can be used for.
+//
+// `InstructionTextBuffer` prints an `InstructionDisplayer`, which means either intel syntax or
+// pseudo-C. in the future, at&t probably, as well.
+//
+// the pseudo-C syntax's max length would be something like:
+// ```
+// xacquire xrelease lock { repnz qword if /* signed */ greater_or_equal(rflags) then jmp gs:[xmm31 +
+// xmm31 * 8 + 0x12345678]{k7}{z}{rne-sae} }
+// ```
+// (which is nonsensical) or for an unknown opcode,
+// ```
+// xacquire xrelease lock { op0 = op(op0, op1, op2, op3) }
+// ```
+// where `opN` is an operand. the longest operand, same as above, would be something like
+// ```
+// gs:[xmm31 + xmm31 * 8 + 0x12345678]{k7}{z}{rne-sae}
+// ```
+// for a length like 262 bytes of operand, 55 bytes of prefixes and syntax, and another up-to-20
+// bytes of opcode.
+//
+// the longest contextualize_c might write is around 337 bytes. round up to 512 because it's.. not
+// much extra.
+//
+// the same reasoning for intel syntax yields a smaller instruction:
+// ```
+// xacquire xrelease lock op op1, op2, op3, op4
+// ```
+// where the longest operands are the same as above. this comes out to closer to 307 bytes. 512
+// bytes is still the longest of the two options.
+#[allow(dead_code)] // can be an unused constant in some library configurations
+const MAX_INSTRUCTION_LEN: usize = 512;
+
 const MEM_SIZE_STRINGS: [&'static str; 65] = [
     "BUG",
     "byte", "word", "BUG", "dword", "ptr", "far", "BUG", "qword",

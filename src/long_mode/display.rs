@@ -4410,9 +4410,7 @@ mod buffer_sink {
         /// settings format instructions identically to their corresponding `fmt::Display`.
         pub fn new() -> Self {
             let mut buf = alloc::string::String::new();
-            // TODO: move 512 out to a MAX_INSTRUCTION_LEN const and appropriate justification (and
-            // fuzzing and ..)
-            buf.reserve(512);
+            buf.reserve(crate::MAX_INSTRUCTION_LEN);
             Self {
                 content: buf,
             }
