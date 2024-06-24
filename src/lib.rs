@@ -35,10 +35,10 @@
 //! #[cfg(features="fmt")]
 //! assert_eq!("xor eax, dword [rcx]", inst.to_string());
 //!
-//! assert_eq!(Operand::Register(RegSpec::eax()), inst.operand(0));
+//! assert_eq!(Operand::Register { reg: RegSpec::eax() }, inst.operand(0));
 //! #[cfg(features="fmt")]
 //! assert_eq!("eax", inst.operand(0).to_string());
-//! assert_eq!(Operand::RegDeref(RegSpec::rcx()), inst.operand(1));
+//! assert_eq!(Operand::MemDeref { base: RegSpec::rcx() }, inst.operand(1));
 //!
 //! // an operand in isolation does not know the size of memory it references, if any
 //! #[cfg(features="fmt")]

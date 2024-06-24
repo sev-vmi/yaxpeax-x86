@@ -3,19 +3,19 @@ use yaxpeax_x86::MemoryAccessSize;
 
 #[test]
 fn register_widths() {
-    assert_eq!(Operand::Register(RegSpec::rsp()).width(), Some(8));
-    assert_eq!(Operand::Register(RegSpec::esp()).width(), Some(4));
-    assert_eq!(Operand::Register(RegSpec::sp()).width(), Some(2));
-    assert_eq!(Operand::Register(RegSpec::cl()).width(), Some(1));
-    assert_eq!(Operand::Register(RegSpec::ch()).width(), Some(1));
-    assert_eq!(Operand::Register(RegSpec::gs()).width(), Some(2));
+    assert_eq!(Operand::Register { reg: RegSpec::rsp() }.width(), Some(8));
+    assert_eq!(Operand::Register { reg: RegSpec::esp() }.width(), Some(4));
+    assert_eq!(Operand::Register { reg: RegSpec::sp() }.width(), Some(2));
+    assert_eq!(Operand::Register { reg: RegSpec::cl() }.width(), Some(1));
+    assert_eq!(Operand::Register { reg: RegSpec::ch() }.width(), Some(1));
+    assert_eq!(Operand::Register { reg: RegSpec::gs() }.width(), Some(2));
 }
 
 #[test]
 fn memory_widths() {
     // the register operand directly doesn't report a size - it comes from the `Instruction` for
-    // which this is an operand.
-    assert_eq!(Operand::RegDeref(RegSpec::rsp()).width(), None);
+    // which this is an operand .
+    assert_eq!(Operand::MemDeref { base: RegSpec::rsp() }.width(), None);
 
     fn mem_size_of(data: &[u8]) -> MemoryAccessSize {
         let decoder = InstDecoder::default();

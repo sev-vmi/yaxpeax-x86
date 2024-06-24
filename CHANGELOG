@@ -1,7 +1,44 @@
-## 1.3.0
+## 2.0.0
 
 * upgrade to `yaxpeax-arch 0.3.1`, which brings with it a deprecation of the
   `Colorize` and `ShowContextual` traits.
+* because common use of yaxpeax-x86 involves using both this crate and
+  `yaxpeax-arch`, moving to a newer major version of `yaxpeax-arch` is a major
+  version bump of `yaxpeax-x86` as well. so, 2.0.0!
+
+changes:
+
+* `Operand` variants have had their naming made more consistent.
+  - many variants starting with "Reg" actually describe a memory access. they
+    now begin with "Mem" instead.
+  - several variants mentioned "Scale" in their name, but not "Index", even
+    though they use an index register. they now do.
+  - several variants mentioned their constituent parts out of order. for
+    example, "RegIndexBaseScaleDisp", even though the parts were specified as
+    base, then index, then scale, then displacement. these names have been
+    adjusted to reflect the order of their fields, which is roughly the order
+    those fields are shown when printed.
+  - `DisplacementU*` operands have always been access to memory at the absolute
+    address they specify. their names are now `AbsoluteU*`
+* `Operand`, across the board, now uses struct-style enum variants, rather than tuple-style.
+* the two changes together mean an operand that was
+  `RegIndexBaseScaleDisp(reg, reg, u8, i32)`
+  is now
+  `MemBaseIndexScaleDisp { base, index, scale, disp }`
+  and similar for other variants.
+* two operand kinds, and their masked variants, were never actually constructed, and have been deleted.
+  - long ago yaxpeax-x86 returned different Operand variants when an index
+    register was used with scale 1, to hint that no scaling actually occurred.
+    this was eventually changed to return a scaling Operand variant with
+    scale==1, but the old variants remained.
+  - RegIndexBase has been removed
+  - RegIndexBaseDisp has been removed
+* `Prefixes::selects_cs()` has been moved to `Prefixes::cs()`, and the old
+  useless functions are no more. `inst.prefixes().cs()` is finally a reasonable
+  way to determine if an instruction reads or writes through the cs prefix.
+
+fixes:
+
 * fix 32-bit call/jmp not respecting 66 prefix if set - such cases use 16-bit
   operands, but decoded as if they used 32-bit operands.
 

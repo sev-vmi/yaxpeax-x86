@@ -406,9 +406,9 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
     }
     #[cfg_attr(not(feature="profiling"), inline(always))]
     #[cfg_attr(feature="profiling", inline(never))]
-    fn visit_disp(&mut self, reg: RegSpec, disp: i32) -> Result<Self::Ok, Self::Error> {
+    fn visit_disp(&mut self, base: RegSpec, disp: i32) -> Result<Self::Ok, Self::Error> {
         self.f.write_char('[')?;
-        self.f.write_reg(reg)?;
+        self.f.write_reg(base)?;
         self.f.write_fixed_size(" ")?;
 
         {
@@ -423,23 +423,23 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         }
         self.f.write_fixed_size("]")
     }
-    fn visit_deref(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_deref(&mut self, base: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        self.f.write_reg(reg)?;
+        self.f.write_reg(base)?;
         self.f.write_fixed_size("]")
     }
-    fn visit_reg_scale(&mut self, reg: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
+    fn visit_index_scale(&mut self, index: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        self.f.write_reg(reg)?;
+        self.f.write_reg(index)?;
         self.f.write_fixed_size(" * ")?;
         self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
         self.f.write_fixed_size("]")?;
 
         Ok(())
     }
-    fn visit_reg_scale_disp(&mut self, reg: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
+    fn visit_index_scale_disp(&mut self, index: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        self.f.write_reg(reg)?;
+        self.f.write_reg(index)?;
         self.f.write_fixed_size(" * ")?;
         self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
         self.f.write_fixed_size(" ")?;
@@ -456,7 +456,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         }
         self.f.write_char(']')
     }
-    fn visit_index_base_scale(&mut self, base: RegSpec, index: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
+    fn visit_base_index_scale(&mut self, base: RegSpec, index: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
         self.f.write_reg(base)?;
         self.f.write_fixed_size(" + ")?;
@@ -465,7 +465,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
         self.f.write_fixed_size("]")
     }
-    fn visit_index_base_scale_disp(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
+    fn visit_base_index_scale_disp(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
         self.f.write_reg(base)?;
         self.f.write_fixed_size(" + ")?;
@@ -486,9 +486,9 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         }
         self.f.write_fixed_size("]")
     }
-    fn visit_reg_disp_masked(&mut self, spec: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_disp_masked(&mut self, base: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_char('[')?;
-        self.f.write_reg(spec)?;
+        self.f.write_reg(base)?;
         self.f.write_char(' ')?;
         let mut v = disp as u32;
         if disp < 0 {
@@ -504,18 +504,18 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         self.f.write_char('}')?;
         Ok(())
     }
-    fn visit_reg_deref_masked(&mut self, spec: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_deref_masked(&mut self, base: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        self.f.write_reg(spec)?;
+        self.f.write_reg(base)?;
         self.f.write_fixed_size("]")?;
         self.f.write_char('{')?;
         self.f.write_reg(mask_reg)?;
         self.f.write_char('}')?;
         Ok(())
     }
-    fn visit_reg_scale_masked(&mut self, spec: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_index_scale_masked(&mut self, index: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        self.f.write_reg(spec)?;
+        self.f.write_reg(index)?;
         self.f.write_fixed_size(" * ")?;
         self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
         self.f.write_fixed_size("]")?;
@@ -524,9 +524,9 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         self.f.write_char('}')?;
         Ok(())
     }
-    fn visit_reg_scale_disp_masked(&mut self, spec: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_index_scale_disp_masked(&mut self, index: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        self.f.write_reg(spec)?;
+        self.f.write_reg(index)?;
         self.f.write_fixed_size(" * ")?;
         self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
         self.f.write_fixed_size(" ")?;
@@ -544,7 +544,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         self.f.write_char('}')?;
         Ok(())
     }
-    fn visit_index_base_masked(&mut self, base: RegSpec, index: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_base_index_masked(&mut self, base: RegSpec, index: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
         self.f.write_reg(base)?;
         self.f.write_fixed_size(" + ")?;
@@ -555,7 +555,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         self.f.write_char('}')?;
         Ok(())
     }
-    fn visit_index_base_disp_masked(&mut self, base: RegSpec, index: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_base_index_disp_masked(&mut self, base: RegSpec, index: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
         self.f.write_reg(base)?;
         self.f.write_fixed_size(" + ")?;
@@ -575,7 +575,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         self.f.write_char('}')?;
         Ok(())
     }
-    fn visit_index_base_scale_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_base_index_scale_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
         self.f.write_reg(base)?;
         self.f.write_fixed_size(" + ")?;
@@ -588,7 +588,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         self.f.write_char('}')?;
         Ok(())
     }
-    fn visit_index_base_scale_disp_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_base_index_scale_disp_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
         self.f.write_reg(base)?;
         self.f.write_fixed_size(" + ")?;
@@ -2420,7 +2420,7 @@ pub(crate) fn contextualize_c<T: DisplaySink>(instr: &Instruction, out: &mut T) 
         let mut out = yaxpeax_arch::display::FmtSink::new(out);
         use core::fmt::Write;
         match op {
-            Operand::ImmediateI8(rel) => {
+            Operand::ImmediateI8 { imm: rel } => {
                 let rel = if rel >= 0 {
                     out.write_str("$+")?;
                     rel as u8
@@ -2430,7 +2430,7 @@ pub(crate) fn contextualize_c<T: DisplaySink>(instr: &Instruction, out: &mut T) 
                 };
                 out.write_prefixed_u8(rel)
             }
-            Operand::ImmediateI32(rel) => {
+            Operand::ImmediateI32 { imm: rel } => {
                 let rel = if rel >= 0 {
                     out.write_str("$+")?;
                     rel as u32
@@ -2824,10 +2824,10 @@ impl<'a, F: DisplaySink> super::OperandVisitor for RelativeBranchPrinter<'a, F> 
     fn visit_reg(&mut self, _reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
-    fn visit_deref(&mut self, _reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_deref(&mut self, _base: RegSpec) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
-    fn visit_disp(&mut self, _reg: RegSpec, _disp: i32) -> Result<Self::Ok, Self::Error> {
+    fn visit_disp(&mut self, _base: RegSpec, _disp: i32) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
     #[cfg_attr(feature="profiling", inline(never))]
@@ -2884,16 +2884,16 @@ impl<'a, F: DisplaySink> super::OperandVisitor for RelativeBranchPrinter<'a, F> 
     fn visit_abs_u32(&mut self, _imm: u32) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
-    fn visit_reg_scale(&mut self, _reg: RegSpec, _scale: u8) -> Result<Self::Ok, Self::Error> {
+    fn visit_index_scale(&mut self, _index: RegSpec, _scale: u8) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
-    fn visit_index_base_scale(&mut self, _base: RegSpec, _index: RegSpec, _scale: u8) -> Result<Self::Ok, Self::Error> {
+    fn visit_base_index_scale(&mut self, _base: RegSpec, _index: RegSpec, _scale: u8) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
-    fn visit_reg_scale_disp(&mut self, _reg: RegSpec, _scale: u8, _disp: i32) -> Result<Self::Ok, Self::Error> {
+    fn visit_index_scale_disp(&mut self, _index: RegSpec, _scale: u8, _disp: i32) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
-    fn visit_index_base_scale_disp(&mut self, _base: RegSpec, _index: RegSpec, _scale: u8, _disp: i32) -> Result<Self::Ok, Self::Error> {
+    fn visit_base_index_scale_disp(&mut self, _base: RegSpec, _index: RegSpec, _scale: u8, _disp: i32) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
     fn visit_other(&mut self) -> Result<Self::Ok, Self::Error> {
@@ -2908,28 +2908,28 @@ impl<'a, F: DisplaySink> super::OperandVisitor for RelativeBranchPrinter<'a, F> 
     fn visit_reg_mask_merge_sae_noround(&mut self, _spec: RegSpec, _mask: RegSpec, _merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
-    fn visit_reg_disp_masked(&mut self, _spec: RegSpec, _disp: i32, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_disp_masked(&mut self, _base: RegSpec, _disp: i32, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
-    fn visit_reg_deref_masked(&mut self, _spec: RegSpec, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_deref_masked(&mut self, _base: RegSpec, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
-    fn visit_reg_scale_masked(&mut self, _spec: RegSpec, _scale: u8, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_index_scale_masked(&mut self, _index: RegSpec, _scale: u8, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
-    fn visit_reg_scale_disp_masked(&mut self, _spec: RegSpec, _scale: u8, _disp: i32, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_index_scale_disp_masked(&mut self, _index: RegSpec, _scale: u8, _disp: i32, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
-    fn visit_index_base_masked(&mut self, _base: RegSpec, _index: RegSpec, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_base_index_masked(&mut self, _base: RegSpec, _index: RegSpec, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
-    fn visit_index_base_disp_masked(&mut self, _base: RegSpec, _index: RegSpec, _disp: i32, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_base_index_disp_masked(&mut self, _base: RegSpec, _index: RegSpec, _disp: i32, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
-    fn visit_index_base_scale_masked(&mut self, _base: RegSpec, _index: RegSpec, _scale: u8, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_base_index_scale_masked(&mut self, _base: RegSpec, _index: RegSpec, _scale: u8, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
-    fn visit_index_base_scale_disp_masked(&mut self, _base: RegSpec, _index: RegSpec, _scale: u8, _disp: i32, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
+    fn visit_base_index_scale_disp_masked(&mut self, _base: RegSpec, _index: RegSpec, _scale: u8, _disp: i32, _mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         Ok(false)
     }
     fn visit_absolute_far_address(&mut self, _segment: u16, _address: u32) -> Result<Self::Ok, Self::Error> {

@@ -368,91 +368,81 @@ enum SizeCode {
 #[non_exhaustive]
 pub enum Operand {
     /// a sign-extended byte
-    ImmediateI8(i8),
+    ImmediateI8 { imm: i8 },
     /// a zero-extended byte
-    ImmediateU8(u8),
+    ImmediateU8 { imm: u8 },
     /// a sign-extended word
-    ImmediateI16(i16),
+    ImmediateI16 { imm: i16 },
     /// a zero-extended word
-    ImmediateU16(u16),
+    ImmediateU16 { imm: u16 },
     /// a sign-extended dword
-    ImmediateI32(i32),
+    ImmediateI32 { imm: i32 },
     /// a zero-extended dword
-    ImmediateU32(u32),
+    ImmediateU32 { imm: u32 },
     /// a sign-extended qword
-    ImmediateI64(i64),
+    ImmediateI64 { imm: i64 },
     /// a zero-extended qword
-    ImmediateU64(u64),
+    ImmediateU64 { imm: u64 },
     /// a bare register operand, such as `rcx`.
-    Register(RegSpec),
+    Register { reg: RegSpec },
     /// an `avx512` register operand with optional mask register and merge mode, such as
     /// `zmm3{k4}{z}`.
     ///
     /// if the mask register is `k0`, there is no masking applied, and the default x86 operation is
     /// `MergeMode::Merge`.
-    RegisterMaskMerge(RegSpec, RegSpec, MergeMode),
+    RegisterMaskMerge { reg: RegSpec, mask: RegSpec, merge: MergeMode },
     /// an `avx512` register operand with optional mask register, merge mode, and suppressed
     /// exceptions, such as `zmm3{k4}{z}{rd-sae}`.
     ///
     /// if the mask register is `k0`, there is no masking applied, and the default x86 operation is
     /// `MergeMode::Merge`.
-    RegisterMaskMergeSae(RegSpec, RegSpec, MergeMode, SaeMode),
+    RegisterMaskMergeSae { reg: RegSpec, mask: RegSpec, merge: MergeMode, sae: SaeMode },
     /// an `avx512` register operand with optional mask register, merge mode, and suppressed
     /// exceptions, with no overridden rounding mode, such as `zmm3{k4}{z}{sae}`.
     ///
     /// if the mask register is `k0`, there is no masking applied, and the default x86 operation is
     /// `MergeMode::Merge`.
-    RegisterMaskMergeSaeNoround(RegSpec, RegSpec, MergeMode),
+    RegisterMaskMergeSaeNoround { reg: RegSpec, mask: RegSpec, merge: MergeMode },
     /// a memory access to a literal dword address. it's extremely rare that a well-formed x86
     /// instruction uses this mode. as an example, `[0x1133]`
-    DisplacementU32(u32),
+    AbsoluteU32 { addr: u32 },
     /// a memory access to a literal qword address. it's relatively rare that a well-formed x86
     /// instruction uses this mode, but plausible. for example, `gs:[0x14]`. segment overrides,
     /// however, are maintained on the instruction itself.
-    DisplacementU64(u64),
+    AbsoluteU64 { addr: u64 },
     /// a simple dereference of the address held in some register. for example: `[rsi]`.
-    RegDeref(RegSpec),
+    MemDeref { base: RegSpec },
     /// a dereference of the address held in some register with offset. for example: `[rsi + 0x14]`.
-    RegDisp(RegSpec, i32),
+    Disp { base: RegSpec, disp: i32 },
     /// a dereference of the address held in some register scaled by 1, 2, 4, or 8. this is almost always used with the `lea` instruction. for example: `[rdx * 4]`.
-    RegScale(RegSpec, u8),
-    /// a dereference of the address from summing two registers. for example: `[rbp + rax]`
-    RegIndexBase(RegSpec, RegSpec),
-    /// a dereference of the address from summing two registers with offset. for example: `[rdi + rcx + 0x40]`
-    RegIndexBaseDisp(RegSpec, RegSpec, i32),
+    MemIndexScale { index: RegSpec, scale: u8 },
     /// a dereference of the address held in some register scaled by 1, 2, 4, or 8 with offset. this is almost always used with the `lea` instruction. for example: `[rax * 4 + 0x30]`.
-    RegScaleDisp(RegSpec, u8, i32),
+    MemIndexScaleDisp { index: RegSpec, scale: u8, disp: i32 },
     /// a dereference of the address from summing a register and index register scaled by 1, 2, 4,
     /// or 8. for
     /// example: `[rsi + rcx * 4]`
-    RegIndexBaseScale(RegSpec, RegSpec, u8),
+    MemBaseIndexScale { base: RegSpec, index: RegSpec, scale: u8 },
     /// a dereference of the address from summing a register and index register scaled by 1, 2, 4,
     /// or 8, with offset. for
     /// example: `[rsi + rcx * 4 + 0x1234]`
-    RegIndexBaseScaleDisp(RegSpec, RegSpec, u8, i32),
+    MemBaseIndexScaleDisp { base: RegSpec, index: RegSpec, scale: u8, disp: i32 },
     /// an `avx512` dereference of register with optional masking. for example: `[rdx]{k3}`
-    RegDerefMasked(RegSpec, RegSpec),
+    MemDerefMasked { base: RegSpec, mask: RegSpec },
     /// an `avx512` dereference of register plus offset, with optional masking. for example: `[rsp + 0x40]{k3}`
-    RegDispMasked(RegSpec, i32, RegSpec),
+    DispMasked { base: RegSpec, disp: i32, mask: RegSpec },
     /// an `avx512` dereference of a register scaled by 1, 2, 4, or 8, with optional masking. this
     /// seems extraordinarily unlikely to occur in practice. for example: `[rsi * 4]{k2}`
-    RegScaleMasked(RegSpec, u8, RegSpec),
-    /// an `avx512` dereference of a register plus index scaled by 1, 2, 4, or 8, with optional masking.
-    /// for example: `[rsi + rax * 4]{k6}`
-    RegIndexBaseMasked(RegSpec, RegSpec, RegSpec),
-    /// an `avx512` dereference of a register plus offset, with optional masking.  for example:
-    /// `[rsi + rax + 0x1313]{k6}`
-    RegIndexBaseDispMasked(RegSpec, RegSpec, i32, RegSpec),
+    MemIndexScaleMasked { index: RegSpec, scale: u8, mask: RegSpec },
     /// an `avx512` dereference of a register scaled by 1, 2, 4, or 8 plus offset, with optional
     /// masking. this seems extraordinarily unlikely to occur in practice. for example: `[rsi *
     /// 4 + 0x1357]{k2}`
-    RegScaleDispMasked(RegSpec, u8, i32, RegSpec),
+    MemIndexScaleDispMasked { index: RegSpec, scale: u8, disp: i32, mask: RegSpec },
     /// an `avx512` dereference of a register plus index scaled by 1, 2, 4, or 8, with optional
     /// masking.  for example: `[rsi + rax * 4]{k6}`
-    RegIndexBaseScaleMasked(RegSpec, RegSpec, u8, RegSpec),
+    MemBaseIndexScaleMasked { base: RegSpec, index: RegSpec, scale: u8, mask: RegSpec },
     /// an `avx512` dereference of a register plus index scaled by 1, 2, 4, or 8 and offset, with
     /// optional masking.  for example: `[rsi + rax * 4 + 0x1313]{k6}`
-    RegIndexBaseScaleDispMasked(RegSpec, RegSpec, u8, i32, RegSpec),
+    MemBaseIndexScaleDispMasked { base: RegSpec, index: RegSpec, scale: u8, disp: i32, mask: RegSpec },
     /// no operand. it is a bug for `yaxpeax-x86` to construct an `Operand` of this kind for public
     /// use; the instruction's `operand_count` should be reduced so as to make this invisible to
     /// library clients.
@@ -466,11 +456,11 @@ impl OperandSpec {
             OperandSpec::RegMMM => OperandSpec::RegMMM_maskmerge,
             OperandSpec::RegVex => OperandSpec::RegVex_maskmerge,
             OperandSpec::Deref => OperandSpec::Deref_mask,
-            OperandSpec::RegDisp => OperandSpec::RegDisp_mask,
-            OperandSpec::RegScale => OperandSpec::RegScale_mask,
-            OperandSpec::RegScaleDisp => OperandSpec::RegScaleDisp_mask,
-            OperandSpec::RegIndexBaseScale => OperandSpec::RegIndexBaseScale_mask,
-            OperandSpec::RegIndexBaseScaleDisp => OperandSpec::RegIndexBaseScaleDisp_mask,
+            OperandSpec::Disp => OperandSpec::Disp_mask,
+            OperandSpec::MemIndexScale => OperandSpec::MemIndexScale_mask,
+            OperandSpec::MemIndexScaleDisp => OperandSpec::MemIndexScaleDisp_mask,
+            OperandSpec::MemBaseIndexScale => OperandSpec::MemBaseIndexScale_mask,
+            OperandSpec::MemBaseIndexScaleDisp => OperandSpec::MemBaseIndexScaleDisp_mask,
             o => o,
         }
     }
@@ -551,10 +541,10 @@ pub trait OperandVisitor {
     fn visit_reg(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error>;
     fn visit_deref(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error>;
     fn visit_disp(&mut self, reg: RegSpec, disp: i32) -> Result<Self::Ok, Self::Error>;
-    fn visit_reg_scale(&mut self, reg: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error>;
-    fn visit_index_base_scale(&mut self, base: RegSpec, index: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error>;
-    fn visit_index_base_scale_disp(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error>;
-    fn visit_reg_scale_disp(&mut self, reg: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error>;
+    fn visit_index_scale(&mut self, reg: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error>;
+    fn visit_index_scale_disp(&mut self, reg: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error>;
+    fn visit_base_index_scale(&mut self, base: RegSpec, index: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error>;
+    fn visit_base_index_scale_disp(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error>;
     fn visit_i8(&mut self, imm: i8) -> Result<Self::Ok, Self::Error>;
     fn visit_u8(&mut self, imm: u8) -> Result<Self::Ok, Self::Error>;
     fn visit_i16(&mut self, imm: i16) -> Result<Self::Ok, Self::Error>;
@@ -568,14 +558,14 @@ pub trait OperandVisitor {
     fn visit_reg_mask_merge(&mut self, base: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error>;
     fn visit_reg_mask_merge_sae(&mut self, base: RegSpec, mask: RegSpec, merge_mode: MergeMode, sae_mode: SaeMode) -> Result<Self::Ok, Self::Error>;
     fn visit_reg_mask_merge_sae_noround(&mut self, base: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error>;
-    fn visit_reg_disp_masked(&mut self, base: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
-    fn visit_reg_deref_masked(&mut self, base: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
-    fn visit_reg_scale_masked(&mut self, base: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
-    fn visit_reg_scale_disp_masked(&mut self, base: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
-    fn visit_index_base_masked(&mut self, base: RegSpec, index: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
-    fn visit_index_base_disp_masked(&mut self, base: RegSpec, index: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
-    fn visit_index_base_scale_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
-    fn visit_index_base_scale_disp_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+    fn visit_disp_masked(&mut self, base: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+    fn visit_deref_masked(&mut self, base: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+    fn visit_index_scale_masked(&mut self, base: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+    fn visit_index_scale_disp_masked(&mut self, base: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+    fn visit_base_index_masked(&mut self, base: RegSpec, index: RegSpec, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+    fn visit_base_index_disp_masked(&mut self, base: RegSpec, index: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+    fn visit_base_index_scale_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
+    fn visit_base_index_scale_disp_masked(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error>;
 
     fn visit_other(&mut self) -> Result<Self::Ok, Self::Error>;
 }
@@ -588,140 +578,140 @@ impl Operand {
             }
             // the register in modrm_rrr
             OperandSpec::RegRRR => {
-                Operand::Register(inst.regs[0])
+                Operand::Register { reg: inst.regs[0] }
             }
             OperandSpec::RegRRR_maskmerge => {
-                Operand::RegisterMaskMerge(
-                    inst.regs[0],
-                    RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()),
-                    MergeMode::from(inst.prefixes.evex_unchecked().merge()),
-                )
+                Operand::RegisterMaskMerge {
+                    reg: inst.regs[0],
+                    mask: RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()),
+                    merge: MergeMode::from(inst.prefixes.evex_unchecked().merge()),
+                }
             }
             OperandSpec::RegRRR_maskmerge_sae => {
-                Operand::RegisterMaskMergeSae(
-                    inst.regs[0],
-                    RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()),
-                    MergeMode::from(inst.prefixes.evex_unchecked().merge()),
-                    SaeMode::from(inst.prefixes.evex_unchecked().vex().l(), inst.prefixes.evex_unchecked().lp()),
-                )
+                Operand::RegisterMaskMergeSae {
+                    reg: inst.regs[0],
+                    mask: RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()),
+                    merge: MergeMode::from(inst.prefixes.evex_unchecked().merge()),
+                    sae: SaeMode::from(inst.prefixes.evex_unchecked().vex().l(), inst.prefixes.evex_unchecked().lp()),
+                }
             }
             OperandSpec::RegRRR_maskmerge_sae_noround => {
-                Operand::RegisterMaskMergeSaeNoround(
-                    inst.regs[0],
-                    RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()),
-                    MergeMode::from(inst.prefixes.evex_unchecked().merge()),
-                )
+                Operand::RegisterMaskMergeSaeNoround {
+                    reg: inst.regs[0],
+                    mask: RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()),
+                    merge: MergeMode::from(inst.prefixes.evex_unchecked().merge()),
+                }
             }
             // the register in modrm_mmm (eg modrm mod bits were 11)
             OperandSpec::RegMMM => {
-                Operand::Register(inst.regs[1])
+                Operand::Register { reg: inst.regs[1] }
             }
             OperandSpec::RegMMM_maskmerge => {
-                Operand::RegisterMaskMerge(
-                    inst.regs[1],
-                    RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()),
-                    MergeMode::from(inst.prefixes.evex_unchecked().merge()),
-                )
+                Operand::RegisterMaskMerge {
+                    reg: inst.regs[1],
+                    mask: RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()),
+                    merge: MergeMode::from(inst.prefixes.evex_unchecked().merge()),
+                }
             }
             OperandSpec::RegMMM_maskmerge_sae_noround => {
-                Operand::RegisterMaskMergeSaeNoround(
-                    inst.regs[1],
-                    RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()),
-                    MergeMode::from(inst.prefixes.evex_unchecked().merge()),
-                )
+                Operand::RegisterMaskMergeSaeNoround {
+                    reg: inst.regs[1],
+                    mask: RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()),
+                    merge: MergeMode::from(inst.prefixes.evex_unchecked().merge()),
+                }
             }
             OperandSpec::RegVex => {
-                Operand::Register(inst.regs[3])
+                Operand::Register { reg: inst.regs[3]}
             }
             OperandSpec::RegVex_maskmerge => {
-                Operand::RegisterMaskMerge(
-                    inst.regs[3],
-                    RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()),
-                    MergeMode::from(inst.prefixes.evex_unchecked().merge()),
-                )
+                Operand::RegisterMaskMerge {
+                    reg: inst.regs[3],
+                    mask: RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()),
+                    merge: MergeMode::from(inst.prefixes.evex_unchecked().merge()),
+                }
             }
             OperandSpec::Reg4 => {
-                Operand::Register(RegSpec { num: inst.imm as u8, bank: inst.regs[3].bank })
+                Operand::Register { reg: RegSpec { num: inst.imm as u8, bank: inst.regs[3].bank }}
             }
-            OperandSpec::ImmI8 => Operand::ImmediateI8(inst.imm as i8),
-            OperandSpec::ImmU8 => Operand::ImmediateU8(inst.imm as u8),
-            OperandSpec::ImmI16 => Operand::ImmediateI16(inst.imm as i16),
-            OperandSpec::ImmU16 => Operand::ImmediateU16(inst.imm as u16),
-            OperandSpec::ImmI32 => Operand::ImmediateI32(inst.imm as i32),
-            OperandSpec::ImmI64 => Operand::ImmediateI64(inst.imm as i64),
-            OperandSpec::ImmInDispField => Operand::ImmediateU16(inst.disp as u16),
-            OperandSpec::DispU32 => Operand::DisplacementU32(inst.disp as u32),
-            OperandSpec::DispU64 => Operand::DisplacementU64(inst.disp as u64),
+            OperandSpec::ImmI8 => Operand::ImmediateI8 { imm: inst.imm as i8 },
+            OperandSpec::ImmU8 => Operand::ImmediateU8 { imm: inst.imm as u8 },
+            OperandSpec::ImmI16 => Operand::ImmediateI16 { imm: inst.imm as i16 },
+            OperandSpec::ImmU16 => Operand::ImmediateU16 { imm: inst.imm as u16 },
+            OperandSpec::ImmI32 => Operand::ImmediateI32 { imm: inst.imm as i32 },
+            OperandSpec::ImmI64 => Operand::ImmediateI64 { imm: inst.imm as i64 },
+            OperandSpec::ImmInDispField => Operand::ImmediateU16 { imm: inst.disp as u16 },
+            OperandSpec::DispU32 => Operand::AbsoluteU32 { addr: inst.disp as u32 },
+            OperandSpec::DispU64 => Operand::AbsoluteU64 { addr: inst.disp as u64 },
             OperandSpec::Deref => {
-                Operand::RegDeref(inst.regs[1])
+                Operand::MemDeref { base: inst.regs[1] }
             }
             OperandSpec::Deref_esi => {
-                Operand::RegDeref(RegSpec::esi())
+                Operand::MemDeref { base: RegSpec::esi() }
             }
             OperandSpec::Deref_edi => {
-                Operand::RegDeref(RegSpec::edi())
+                Operand::MemDeref { base: RegSpec::edi() }
             }
             OperandSpec::Deref_rsi => {
-                Operand::RegDeref(RegSpec::rsi())
+                Operand::MemDeref { base: RegSpec::rsi() }
             }
             OperandSpec::Deref_rdi => {
-                Operand::RegDeref(RegSpec::rdi())
+                Operand::MemDeref { base: RegSpec::rdi() }
             }
-            OperandSpec::RegDisp => {
-                Operand::RegDisp(inst.regs[1], inst.disp as i32)
+            OperandSpec::Disp => {
+                Operand::Disp { base: inst.regs[1], disp: inst.disp as i32 }
             }
-            OperandSpec::RegScale => {
-                Operand::RegScale(inst.regs[2], inst.scale)
+            OperandSpec::MemIndexScale => {
+                Operand::MemIndexScale { index: inst.regs[2], scale: inst.scale }
             }
-            OperandSpec::RegScaleDisp => {
-                Operand::RegScaleDisp(inst.regs[2], inst.scale, inst.disp as i32)
+            OperandSpec::MemIndexScaleDisp => {
+                Operand::MemIndexScaleDisp { index: inst.regs[2], scale: inst.scale, disp: inst.disp as i32 }
             }
-            OperandSpec::RegIndexBaseScale => {
-                Operand::RegIndexBaseScale(inst.regs[1], inst.regs[2], inst.scale)
+            OperandSpec::MemBaseIndexScale => {
+                Operand::MemBaseIndexScale { base: inst.regs[1], index: inst.regs[2], scale: inst.scale }
             }
-            OperandSpec::RegIndexBaseScaleDisp => {
-                Operand::RegIndexBaseScaleDisp(inst.regs[1], inst.regs[2], inst.scale, inst.disp as i32)
+            OperandSpec::MemBaseIndexScaleDisp => {
+                Operand::MemBaseIndexScaleDisp { base: inst.regs[1], index: inst.regs[2], scale: inst.scale, disp: inst.disp as i32 }
             }
             OperandSpec::Deref_mask => {
                 if inst.prefixes.evex_unchecked().mask_reg() != 0 {
-                    Operand::RegDerefMasked(inst.regs[1], RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()))
+                    Operand::MemDerefMasked { base: inst.regs[1], mask: RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()) }
                 } else {
-                    Operand::RegDeref(inst.regs[1])
+                    Operand::MemDeref { base: inst.regs[1] }
                 }
             }
-            OperandSpec::RegDisp_mask => {
+            OperandSpec::Disp_mask => {
                 if inst.prefixes.evex_unchecked().mask_reg() != 0 {
-                    Operand::RegDispMasked(inst.regs[1], inst.disp as i32, RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()))
+                    Operand::DispMasked { base: inst.regs[1], disp: inst.disp as i32, mask: RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()) }
                 } else {
-                    Operand::RegDisp(inst.regs[1], inst.disp as i32)
+                    Operand::Disp { base: inst.regs[1], disp: inst.disp as i32 }
                 }
             }
-            OperandSpec::RegScale_mask => {
+            OperandSpec::MemIndexScale_mask => {
                 if inst.prefixes.evex_unchecked().mask_reg() != 0 {
-                    Operand::RegScaleMasked(inst.regs[2], inst.scale, RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()))
+                    Operand::MemIndexScaleMasked { index: inst.regs[2], scale: inst.scale, mask: RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()) }
                 } else {
-                    Operand::RegScale(inst.regs[2], inst.scale)
+                    Operand::MemIndexScale { index: inst.regs[2], scale: inst.scale }
                 }
             }
-            OperandSpec::RegScaleDisp_mask => {
+            OperandSpec::MemIndexScaleDisp_mask => {
                 if inst.prefixes.evex_unchecked().mask_reg() != 0 {
-                    Operand::RegScaleDispMasked(inst.regs[2], inst.scale, inst.disp as i32, RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()))
+                    Operand::MemIndexScaleDispMasked { index: inst.regs[2], scale: inst.scale, disp: inst.disp as i32, mask: RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()) }
                 } else {
-                    Operand::RegScaleDisp(inst.regs[2], inst.scale, inst.disp as i32)
+                    Operand::MemIndexScaleDisp { index: inst.regs[2], scale: inst.scale, disp: inst.disp as i32 }
                 }
             }
-            OperandSpec::RegIndexBaseScale_mask => {
+            OperandSpec::MemBaseIndexScale_mask => {
                 if inst.prefixes.evex_unchecked().mask_reg() != 0 {
-                    Operand::RegIndexBaseScaleMasked(inst.regs[1], inst.regs[2], inst.scale, RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()))
+                    Operand::MemBaseIndexScaleMasked { base: inst.regs[1], index: inst.regs[2], scale: inst.scale, mask: RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()) }
                 } else {
-                    Operand::RegIndexBaseScale(inst.regs[1], inst.regs[2], inst.scale)
+                    Operand::MemBaseIndexScale { base: inst.regs[1], index: inst.regs[2], scale: inst.scale }
                 }
             }
-            OperandSpec::RegIndexBaseScaleDisp_mask => {
+            OperandSpec::MemBaseIndexScaleDisp_mask => {
                 if inst.prefixes.evex_unchecked().mask_reg() != 0 {
-                    Operand::RegIndexBaseScaleDispMasked(inst.regs[1], inst.regs[2], inst.scale, inst.disp as i32, RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()))
+                    Operand::MemBaseIndexScaleDispMasked { base: inst.regs[1], index: inst.regs[2], scale: inst.scale, disp: inst.disp as i32, mask: RegSpec::mask(inst.prefixes.evex_unchecked().mask_reg()) }
                 } else {
-                    Operand::RegIndexBaseScaleDisp(inst.regs[1], inst.regs[2], inst.scale, inst.disp as i32)
+                    Operand::MemBaseIndexScaleDisp { base: inst.regs[1], index: inst.regs[2], scale: inst.scale, disp: inst.disp as i32 }
                 }
             }
         }
@@ -733,38 +723,34 @@ impl Operand {
     /// memory.
     pub fn is_memory(&self) -> bool {
         match self {
-            Operand::DisplacementU32(_) |
-            Operand::DisplacementU64(_) |
-            Operand::RegDeref(_) |
-            Operand::RegDisp(_, _) |
-            Operand::RegScale(_, _) |
-            Operand::RegIndexBase(_, _) |
-            Operand::RegIndexBaseDisp(_, _, _) |
-            Operand::RegScaleDisp(_, _, _) |
-            Operand::RegIndexBaseScale(_, _, _) |
-            Operand::RegIndexBaseScaleDisp(_, _, _, _) |
-            Operand::RegDerefMasked(_, _) |
-            Operand::RegDispMasked(_, _, _) |
-            Operand::RegScaleMasked(_, _, _) |
-            Operand::RegIndexBaseMasked(_, _, _) |
-            Operand::RegIndexBaseDispMasked(_, _, _, _) |
-            Operand::RegScaleDispMasked(_, _, _, _) |
-            Operand::RegIndexBaseScaleMasked(_, _, _, _) |
-            Operand::RegIndexBaseScaleDispMasked(_, _, _, _, _) => {
+            Operand::AbsoluteU32 { .. } |
+            Operand::AbsoluteU64 { .. } |
+            Operand::MemDeref { .. } |
+            Operand::Disp { .. } |
+            Operand::MemIndexScale { .. } |
+            Operand::MemIndexScaleDisp { .. } |
+            Operand::MemBaseIndexScale { .. } |
+            Operand::MemBaseIndexScaleDisp { .. } |
+            Operand::MemDerefMasked { .. } |
+            Operand::DispMasked { .. } |
+            Operand::MemIndexScaleMasked { .. } |
+            Operand::MemIndexScaleDispMasked { .. } |
+            Operand::MemBaseIndexScaleMasked { .. } |
+            Operand::MemBaseIndexScaleDispMasked { .. } => {
                 true
             },
-            Operand::ImmediateI8(_) |
-            Operand::ImmediateU8(_) |
-            Operand::ImmediateI16(_) |
-            Operand::ImmediateU16(_) |
-            Operand::ImmediateU32(_) |
-            Operand::ImmediateI32(_) |
-            Operand::ImmediateU64(_) |
-            Operand::ImmediateI64(_) |
-            Operand::Register(_) |
-            Operand::RegisterMaskMerge(_, _, _) |
-            Operand::RegisterMaskMergeSae(_, _, _, _) |
-            Operand::RegisterMaskMergeSaeNoround(_, _, _) |
+            Operand::ImmediateI8 { .. } |
+            Operand::ImmediateU8 { .. } |
+            Operand::ImmediateI16 { .. } |
+            Operand::ImmediateU16 { .. } |
+            Operand::ImmediateU32 { .. } |
+            Operand::ImmediateI32 { .. } |
+            Operand::ImmediateU64 { .. } |
+            Operand::ImmediateI64 { .. } |
+            Operand::Register { .. } |
+            Operand::RegisterMaskMerge { .. } |
+            Operand::RegisterMaskMergeSae { .. } |
+            Operand::RegisterMaskMergeSaeNoround { .. } |
             Operand::Nothing => {
                 false
             }
@@ -776,26 +762,26 @@ impl Operand {
     /// `Operand` came from; `None` here means the authoritative width is `instr.mem_size()`.
     pub fn width(&self) -> Option<u8> {
         match self {
-            Operand::Register(reg) => {
+            Operand::Register { reg } => {
                 Some(reg.width())
             }
-            Operand::RegisterMaskMerge(reg, _, _) => {
+            Operand::RegisterMaskMerge { reg, .. } => {
                 Some(reg.width())
             }
-            Operand::ImmediateI8(_) |
-            Operand::ImmediateU8(_) => {
+            Operand::ImmediateI8 { .. } |
+            Operand::ImmediateU8 { .. } => {
                 Some(1)
             }
-            Operand::ImmediateI16(_) |
-            Operand::ImmediateU16(_) => {
+            Operand::ImmediateI16 { .. } |
+            Operand::ImmediateU16 { .. } => {
                 Some(2)
             }
-            Operand::ImmediateI32(_) |
-            Operand::ImmediateU32(_) => {
+            Operand::ImmediateI32 { .. } |
+            Operand::ImmediateU32 { .. } => {
                 Some(4)
             }
-            Operand::ImmediateI64(_) |
-            Operand::ImmediateU64(_) => {
+            Operand::ImmediateI64 { .. } |
+            Operand::ImmediateU64 { .. } => {
                 Some(8)
             }
             // memory operands or `Nothing`
@@ -813,42 +799,38 @@ impl Operand {
             Operand::Nothing => {
                 visitor.visit_other()
             }
-            Operand::Register(reg) => {
+            Operand::Register { reg } => {
                 visitor.visit_reg(*reg)
             }
-            Operand::RegDeref(reg) => {
-                visitor.visit_deref(*reg)
+            Operand::MemDeref { base } => {
+                visitor.visit_deref(*base)
             }
-            Operand::RegDisp(reg, disp) => {
-                visitor.visit_disp(*reg, *disp)
+            Operand::Disp { base, disp } => {
+                visitor.visit_disp(*base, *disp)
             }
-            Operand::ImmediateI8(imm) => visitor.visit_i8(*imm),
-            Operand::ImmediateU8(imm) => visitor.visit_u8(*imm),
-            Operand::ImmediateI16(imm) => visitor.visit_i16(*imm),
-            Operand::ImmediateU16(imm) => visitor.visit_u16(*imm),
-            Operand::ImmediateI32(imm) => visitor.visit_i32(*imm),
-            Operand::ImmediateU32(imm) => visitor.visit_u32(*imm),
-            Operand::ImmediateI64(imm) => visitor.visit_i64(*imm),
-            Operand::ImmediateU64(imm) => visitor.visit_u64(*imm),
-            Operand::DisplacementU32(disp) => visitor.visit_abs_u32(*disp),
-            Operand::DisplacementU64(disp) => visitor.visit_abs_u64(*disp),
-            Operand::RegScale(reg, scale) => visitor.visit_reg_scale(*reg, *scale),
-            Operand::RegScaleDisp(reg, scale, disp) => visitor.visit_reg_scale_disp(*reg, *scale, *disp),
-            Operand::RegIndexBase(_, _) => { /* not actually reachable anymore */ visitor.visit_other() },
-            Operand::RegIndexBaseDisp(_, _, _) => { /* not actually reachable anymore */ visitor.visit_other() },
-            Operand::RegIndexBaseScale(base, index, scale) => visitor.visit_index_base_scale(*base, *index, *scale),
-            Operand::RegIndexBaseScaleDisp(base, index, scale, disp) => visitor.visit_index_base_scale_disp(*base, *index, *scale, *disp),
-            Operand::RegisterMaskMerge(reg, mask, merge) => visitor.visit_reg_mask_merge(*reg, *mask, *merge),
-            Operand::RegisterMaskMergeSae(reg, mask, merge, sae) => visitor.visit_reg_mask_merge_sae(*reg, *mask, *merge, *sae),
-            Operand::RegisterMaskMergeSaeNoround(reg, mask, merge) => visitor.visit_reg_mask_merge_sae_noround(*reg, *mask, *merge),
-            Operand::RegDerefMasked(reg, mask) => visitor.visit_reg_deref_masked(*reg, *mask),
-            Operand::RegDispMasked(reg, disp, mask) => visitor.visit_reg_disp_masked(*reg, *disp, *mask),
-            Operand::RegScaleMasked(reg, scale, mask) => visitor.visit_reg_scale_masked(*reg, *scale, *mask),
-            Operand::RegIndexBaseMasked(_, _, _) => { /* not actually reachable anymore */ visitor.visit_other() },
-            Operand::RegIndexBaseDispMasked(_, _, _, _) => { /* not actually reachable anymore */ visitor.visit_other() },
-            Operand::RegScaleDispMasked(base, scale, disp, mask) => visitor.visit_reg_scale_disp_masked(*base, *scale, *disp, *mask),
-            Operand::RegIndexBaseScaleMasked(base, index, scale, mask) => visitor.visit_index_base_scale_masked(*base, *index, *scale, *mask),
-            Operand::RegIndexBaseScaleDispMasked(base, index, scale, disp, mask) => visitor.visit_index_base_scale_disp_masked(*base, *index, *scale, *disp, *mask),
+            Operand::ImmediateI8 { imm } => visitor.visit_i8(*imm),
+            Operand::ImmediateU8 { imm } => visitor.visit_u8(*imm),
+            Operand::ImmediateI16 { imm } => visitor.visit_i16(*imm),
+            Operand::ImmediateU16 { imm } => visitor.visit_u16(*imm),
+            Operand::ImmediateI32 { imm } => visitor.visit_i32(*imm),
+            Operand::ImmediateU32 { imm } => visitor.visit_u32(*imm),
+            Operand::ImmediateI64 { imm } => visitor.visit_i64(*imm),
+            Operand::ImmediateU64 { imm } => visitor.visit_u64(*imm),
+            Operand::AbsoluteU32 { addr } => visitor.visit_abs_u32(*addr),
+            Operand::AbsoluteU64 { addr } => visitor.visit_abs_u64(*addr),
+            Operand::MemIndexScale { index, scale } => visitor.visit_index_scale(*index, *scale),
+            Operand::MemIndexScaleDisp { index, scale, disp } => visitor.visit_index_scale_disp(*index, *scale, *disp),
+            Operand::MemBaseIndexScale { base, index, scale } => visitor.visit_base_index_scale(*base, *index, *scale),
+            Operand::MemBaseIndexScaleDisp { base, index, scale, disp } => visitor.visit_base_index_scale_disp(*base, *index, *scale, *disp),
+            Operand::RegisterMaskMerge { reg, mask, merge } => visitor.visit_reg_mask_merge(*reg, *mask, *merge),
+            Operand::RegisterMaskMergeSae { reg, mask, merge, sae } => visitor.visit_reg_mask_merge_sae(*reg, *mask, *merge, *sae),
+            Operand::RegisterMaskMergeSaeNoround { reg, mask, merge } => visitor.visit_reg_mask_merge_sae_noround(*reg, *mask, *merge),
+            Operand::MemDerefMasked { base, mask } => visitor.visit_deref_masked(*base, *mask),
+            Operand::DispMasked { base, disp, mask } => visitor.visit_disp_masked(*base, *disp, *mask),
+            Operand::MemIndexScaleMasked { index, scale, mask } => visitor.visit_index_scale_masked(*index, *scale, *mask),
+            Operand::MemIndexScaleDispMasked { index, scale, disp, mask } => visitor.visit_index_scale_disp_masked(*index, *scale, *disp, *mask),
+            Operand::MemBaseIndexScaleMasked { base, index, scale, mask } => visitor.visit_base_index_scale_masked(*base, *index, *scale, *mask),
+            Operand::MemBaseIndexScaleDispMasked { base, index, scale, disp, mask } => visitor.visit_base_index_scale_disp_masked(*base, *index, *scale, *disp, *mask),
         }
     }
 }
@@ -941,16 +923,16 @@ const REGISTER_CLASS_NAMES: &[&'static str] = &[
 ///     }
 /// }
 ///
-/// if let Operand::Register(regspec) = instruction.operand(0) {
+/// if let Operand::Register { reg } = instruction.operand(0) {
 ///     #[cfg(feature="fmt")]
-///     println!("first operand is {}", regspec);
-///     show_register_class_info(regspec.class());
+///     println!("first operand is {}", reg);
+///     show_register_class_info(reg.class());
 /// }
 ///
-/// if let Operand::Register(regspec) = instruction.operand(1) {
+/// if let Operand::Register { reg } = instruction.operand(1) {
 ///     #[cfg(feature="fmt")]
-///     println!("first operand is {}", regspec);
-///     show_register_class_info(regspec.class());
+///     println!("first operand is {}", reg);
+///     show_register_class_info(reg.class());
 /// }
 /// ```
 ///
@@ -2753,17 +2735,17 @@ enum OperandSpec {
     Deref_edi = 0x90,
     Deref_rsi = 0x91,
     Deref_rdi = 0x92,
-    RegDisp = 0x93,
-    RegScale = 0x94,
-    RegScaleDisp = 0x95,
-    RegIndexBaseScale = 0x96,
-    RegIndexBaseScaleDisp = 0x97,
+    Disp = 0x93,
+    MemIndexScale = 0x94,
+    MemIndexScaleDisp = 0x95,
+    MemBaseIndexScale = 0x96,
+    MemBaseIndexScaleDisp = 0x97,
     Deref_mask = 0xce,
-    RegDisp_mask = 0xd3,
-    RegScale_mask = 0xd4,
-    RegScaleDisp_mask = 0xd5,
-    RegIndexBaseScale_mask = 0xd6,
-    RegIndexBaseScaleDisp_mask = 0xd7,
+    Disp_mask = 0xd3,
+    MemIndexScale_mask = 0xd4,
+    MemIndexScaleDisp_mask = 0xd5,
+    MemBaseIndexScale_mask = 0xd6,
+    MemBaseIndexScaleDisp_mask = 0xd7,
 }
 
 // the Hash, Eq, and PartialEq impls here are possibly misleading.
@@ -4471,7 +4453,7 @@ impl Instruction {
 //                visitor.visit_other()
                 visitor.visit_deref(RegSpec::rdi())
             }
-            OperandSpec::RegDisp => {
+            OperandSpec::Disp => {
                 visitor.visit_disp(self.regs[1], self.disp as i32)
             }
             OperandSpec::RegRRR_maskmerge => {
@@ -4526,61 +4508,58 @@ impl Instruction {
             OperandSpec::ImmInDispField => visitor.visit_u16(self.disp as u16),
             OperandSpec::DispU32 => visitor.visit_abs_u32(self.disp as u32),
             OperandSpec::DispU64 => visitor.visit_abs_u64(self.disp as u64),
-            OperandSpec::RegScale => {
-                visitor.visit_reg_scale(self.regs[2], self.scale)
+            OperandSpec::MemIndexScale => {
+                visitor.visit_index_scale(self.regs[2], self.scale)
             }
-            OperandSpec::RegScaleDisp => {
-                visitor.visit_reg_scale_disp(self.regs[2], self.scale, self.disp as i32)
+            OperandSpec::MemIndexScaleDisp => {
+                visitor.visit_index_scale_disp(self.regs[2], self.scale, self.disp as i32)
             }
-            OperandSpec::RegIndexBaseScale => {
-                visitor.visit_index_base_scale(self.regs[1], self.regs[2], self.scale)
-                    /*
-                Operand::RegIndexBaseScale(self.regs[1], self.regs[2], self.scale)
-                */
+            OperandSpec::MemBaseIndexScale => {
+                visitor.visit_base_index_scale(self.regs[1], self.regs[2], self.scale)
             }
-            OperandSpec::RegIndexBaseScaleDisp => {
-                visitor.visit_index_base_scale_disp(self.regs[1], self.regs[2], self.scale, self.disp as i32)
+            OperandSpec::MemBaseIndexScaleDisp => {
+                visitor.visit_base_index_scale_disp(self.regs[1], self.regs[2], self.scale, self.disp as i32)
             }
             OperandSpec::Deref_mask => {
                 if self.prefixes.evex_unchecked().mask_reg() != 0 {
-                    visitor.visit_reg_deref_masked(self.regs[1], RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
+                    visitor.visit_deref_masked(self.regs[1], RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
                 } else {
                     visitor.visit_deref(self.regs[1])
                 }
             }
-            OperandSpec::RegDisp_mask => {
+            OperandSpec::Disp_mask => {
                 if self.prefixes.evex_unchecked().mask_reg() != 0 {
-                    visitor.visit_reg_disp_masked(self.regs[1], self.disp as i32, RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
+                    visitor.visit_disp_masked(self.regs[1], self.disp as i32, RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
                 } else {
                     visitor.visit_disp(self.regs[1], self.disp as i32)
                 }
             }
-            OperandSpec::RegScale_mask => {
+            OperandSpec::MemIndexScale_mask => {
                 if self.prefixes.evex_unchecked().mask_reg() != 0 {
-                    visitor.visit_reg_scale_masked(self.regs[2], self.scale, RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
+                    visitor.visit_index_scale_masked(self.regs[2], self.scale, RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
                 } else {
-                    visitor.visit_reg_scale(self.regs[2], self.scale)
+                    visitor.visit_index_scale(self.regs[2], self.scale)
                 }
             }
-            OperandSpec::RegScaleDisp_mask => {
+            OperandSpec::MemIndexScaleDisp_mask => {
                 if self.prefixes.evex_unchecked().mask_reg() != 0 {
-                    visitor.visit_reg_scale_disp_masked(self.regs[2], self.scale, self.disp as i32, RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
+                    visitor.visit_index_scale_disp_masked(self.regs[2], self.scale, self.disp as i32, RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
                 } else {
-                    visitor.visit_reg_scale_disp(self.regs[2], self.scale, self.disp as i32)
+                    visitor.visit_index_scale_disp(self.regs[2], self.scale, self.disp as i32)
                 }
             }
-            OperandSpec::RegIndexBaseScale_mask => {
+            OperandSpec::MemBaseIndexScale_mask => {
                 if self.prefixes.evex_unchecked().mask_reg() != 0 {
-                    visitor.visit_index_base_scale_masked(self.regs[1], self.regs[2], self.scale, RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
+                    visitor.visit_base_index_scale_masked(self.regs[1], self.regs[2], self.scale, RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
                 } else {
-                    visitor.visit_index_base_scale(self.regs[1], self.regs[2], self.scale)
+                    visitor.visit_base_index_scale(self.regs[1], self.regs[2], self.scale)
                 }
             }
-            OperandSpec::RegIndexBaseScaleDisp_mask => {
+            OperandSpec::MemBaseIndexScaleDisp_mask => {
                 if self.prefixes.evex_unchecked().mask_reg() != 0 {
-                    visitor.visit_index_base_scale_disp_masked(self.regs[1], self.regs[2], self.scale, self.disp as i32, RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
+                    visitor.visit_base_index_scale_disp_masked(self.regs[1], self.regs[2], self.scale, self.disp as i32, RegSpec::mask(self.prefixes.evex_unchecked().mask_reg()))
                 } else {
-                    visitor.visit_index_base_scale_disp(self.regs[1], self.regs[2], self.scale, self.disp as i32)
+                    visitor.visit_base_index_scale_disp(self.regs[1], self.regs[2], self.scale, self.disp as i32)
                 }
             }
         }
@@ -6253,7 +6232,7 @@ fn read_sib<
                         InnerDescription::Misc("mod bits select no base register")
                             .with_id(sib_start + 0)
                     );
-                    OperandSpec::RegScale
+                    OperandSpec::MemIndexScale
                 } else {
                     sink.record(
                         modrm_start + 6,
@@ -6261,7 +6240,7 @@ fn read_sib<
                         InnerDescription::RegisterNumber("mod", 0b101, instr.regs[1])
                             .with_id(sib_start + 0)
                     );
-                    OperandSpec::RegIndexBaseScale
+                    OperandSpec::MemBaseIndexScale
                 }
             }
         } else {
@@ -6280,7 +6259,7 @@ fn read_sib<
                     InnerDescription::RegisterNumber("iii", instr.regs[2].num & 0b111, instr.regs[2])
                         .with_id(sib_start + 0)
                 );
-                OperandSpec::RegIndexBaseScale
+                OperandSpec::MemBaseIndexScale
             }
         }
 
@@ -6314,7 +6293,7 @@ fn read_sib<
                         InnerDescription::RegisterNumber("mod", 0b101, instr.regs[1])
                             .with_id(sib_start + 0)
                     );
-                    OperandSpec::RegDisp
+                    OperandSpec::Disp
                 }
             } else {
                 sink.record(
@@ -6330,7 +6309,7 @@ fn read_sib<
                         InnerDescription::Misc("mod bits select no base register, [index+disp] only")
                             .with_id(sib_start + 0)
                     );
-                    OperandSpec::RegScaleDisp
+                    OperandSpec::MemIndexScaleDisp
                 } else {
                     sink.record(
                         modrm_start + 6,
@@ -6338,7 +6317,7 @@ fn read_sib<
                         InnerDescription::RegisterNumber("mod", 0b101, instr.regs[1])
                             .with_id(sib_start + 0)
                     );
-                    OperandSpec::RegIndexBaseScaleDisp
+                    OperandSpec::MemBaseIndexScaleDisp
                 }
             }
         } else {
@@ -6355,7 +6334,7 @@ fn read_sib<
                     InnerDescription::Misc("iii + rex.x selects no index register")
                         .with_id(sib_start + 0)
                 );
-                OperandSpec::RegDisp
+                OperandSpec::Disp
             } else {
                 sink.record(
                     sib_start + 3,
@@ -6363,7 +6342,7 @@ fn read_sib<
                     InnerDescription::RegisterNumber("iii", instr.regs[2].num & 0b111, instr.regs[2])
                         .with_id(sib_start + 0)
                 );
-                OperandSpec::RegIndexBaseScaleDisp
+                OperandSpec::MemBaseIndexScaleDisp
             }
         }
     };
@@ -6449,7 +6428,7 @@ fn read_M<
                     OperandSpec::Deref
                 } else {
                     instr.disp = disp as i64 as u64;
-                    OperandSpec::RegDisp
+                    OperandSpec::Disp
                 }
             } else {
                 sink.record(
@@ -6491,7 +6470,7 @@ fn read_M<
                 OperandSpec::Deref
             } else {
                 instr.disp = disp as i64 as u64;
-                OperandSpec::RegDisp
+                OperandSpec::Disp
             }
         }
     };
