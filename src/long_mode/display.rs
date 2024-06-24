@@ -65,6 +65,8 @@ trait DisplaySinkExt {
 
     fn write_opcode(&mut self, opcode: super::Opcode) -> Result<(), core::fmt::Error>;
     fn write_reg(&mut self, reg: RegSpec) -> Result<(), core::fmt::Error>;
+    fn write_displacement(&mut self, disp: i32) -> Result<(), core::fmt::Error>;
+    fn write_scale(&mut self, scale: u8) -> Result<(), core::fmt::Error>;
     fn write_mem_size_label(&mut self, mem_size: u8) -> Result<(), core::fmt::Error>;
     fn write_sae_mode(&mut self, sae: super::SaeMode) -> Result<(), core::fmt::Error>;
 }
@@ -72,20 +74,49 @@ trait DisplaySinkExt {
 impl<T: DisplaySink> DisplaySinkExt for T {
     #[inline(always)]
     fn write_opcode(&mut self, opcode: super::Opcode) -> Result<(), core::fmt::Error> {
+        self.span_start_opcode();
         let name = opcode.name();
 
         let _ = Self::MNEMONIC_LT_32;
         // Safety: all opcode mnemonics are 31 bytes or fewer.
-        unsafe { self.write_lt_32(name) }
+        unsafe { self.write_lt_32(name)?; }
+        self.span_end_opcode();
+        Ok(())
     }
 
     #[inline(always)]
     fn write_reg(&mut self, reg: RegSpec) -> Result<(), core::fmt::Error> {
+        self.span_start_register();
         let label = regspec_label(&reg);
 
         let _ = Self::REG_LABEL_LT_8;
         // Safety: all register labels are 7 bytes or fewer.
-        unsafe { self.write_lt_8(label) }
+        unsafe { self.write_lt_8(label)?; }
+        self.span_end_register();
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn write_displacement(&mut self, disp: i32) -> Result<(), core::fmt::Error> {
+        let mut v = disp as u32;
+        if disp < 0 {
+            self.write_fixed_size("- ")?;
+            v = disp.unsigned_abs();
+        } else {
+            self.write_fixed_size("+ ")?;
+        }
+        self.span_start_number();
+        self.write_prefixed_u32(v)?;
+        self.span_end_number();
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn write_scale(&mut self, scale: u8) -> Result<(), core::fmt::Error> {
+        self.span_start_number();
+        self.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.span_end_number();
+        Ok(())
     }
 
     #[inline(always)]
@@ -367,20 +398,14 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
     }
     #[cfg_attr(feature="profiling", inline(never))]
     fn visit_reg(&mut self, reg: RegSpec) -> Result<Self::Ok, Self::Error> {
-        self.f.span_start_register();
         self.f.write_reg(reg)?;
-        self.f.span_end_register();
         Ok(())
     }
     fn visit_reg_mask_merge(&mut self, spec: RegSpec, mask: RegSpec, merge_mode: MergeMode) -> Result<Self::Ok, Self::Error> {
-        self.f.span_start_register();
         self.f.write_reg(spec)?;
-        self.f.span_end_register();
         if mask.num != 0 {
             self.f.write_fixed_size("{")?;
-            self.f.span_start_register();
             self.f.write_reg(mask)?;
-            self.f.span_end_register();
             self.f.write_fixed_size("}")?;
         }
         if let MergeMode::Zero = merge_mode {
@@ -416,15 +441,17 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
     }
     fn visit_abs_u32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        self.f.write_fixed_size("0x")?;
-        self.f.write_u32(imm)?;
+        self.f.span_start_address();
+        self.f.write_prefixed_u32(imm)?;
+        self.f.span_end_address();
         self.f.write_fixed_size("]")?;
         Ok(())
     }
     fn visit_abs_u64(&mut self, imm: u64) -> Result<Self::Ok, Self::Error> {
         self.f.write_fixed_size("[")?;
-        self.f.write_fixed_size("0x")?;
-        self.f.write_u64(imm)?;
+        self.f.span_start_address();
+        self.f.write_prefixed_u64(imm)?;
+        self.f.span_end_address();
         self.f.write_fixed_size("]")?;
         Ok(())
     }
@@ -434,17 +461,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         self.f.write_char('[')?;
         self.f.write_reg(base)?;
         self.f.write_fixed_size(" ")?;
-
-        {
-            let mut v = disp as u32;
-            if disp < 0 {
-                self.f.write_fixed_size("- 0x")?;
-                v = disp.unsigned_abs();
-            } else {
-                self.f.write_fixed_size("+ 0x")?;
-            }
-            self.f.write_u32(v)?;
-        }
+        self.f.write_displacement(disp)?;
         self.f.write_fixed_size("]")
     }
     fn visit_deref(&mut self, base: RegSpec) -> Result<Self::Ok, Self::Error> {
@@ -456,7 +473,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         self.f.write_fixed_size("[")?;
         self.f.write_reg(index)?;
         self.f.write_fixed_size(" * ")?;
-        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_scale(scale)?;
         self.f.write_fixed_size("]")?;
 
         Ok(())
@@ -465,19 +482,9 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         self.f.write_fixed_size("[")?;
         self.f.write_reg(index)?;
         self.f.write_fixed_size(" * ")?;
-        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_scale(scale)?;
         self.f.write_fixed_size(" ")?;
-
-        {
-            let mut v = disp as u32;
-            if disp < 0 {
-                self.f.write_fixed_size("- 0x")?;
-                v = disp.unsigned_abs();
-            } else {
-                self.f.write_fixed_size("+ 0x")?;
-            }
-            self.f.write_u32(v)?;
-        }
+        self.f.write_displacement(disp)?;
         self.f.write_char(']')
     }
     fn visit_base_index_scale(&mut self, base: RegSpec, index: RegSpec, scale: u8) -> Result<Self::Ok, Self::Error> {
@@ -486,7 +493,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         self.f.write_fixed_size(" + ")?;
         self.f.write_reg(index)?;
         self.f.write_fixed_size(" * ")?;
-        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_scale(scale)?;
         self.f.write_fixed_size("]")
     }
     fn visit_base_index_scale_disp(&mut self, base: RegSpec, index: RegSpec, scale: u8, disp: i32) -> Result<Self::Ok, Self::Error> {
@@ -495,33 +502,16 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         self.f.write_fixed_size(" + ")?;
         self.f.write_reg(index)?;
         self.f.write_fixed_size(" * ")?;
-        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_scale(scale)?;
         self.f.write_fixed_size(" ")?;
-
-        {
-            let mut v = disp as u32;
-            if disp < 0 {
-                self.f.write_fixed_size("- 0x")?;
-                v = disp.unsigned_abs();
-            } else {
-                self.f.write_fixed_size("+ 0x")?;
-            }
-            self.f.write_u32(v)?;
-        }
+        self.f.write_displacement(disp)?;
         self.f.write_fixed_size("]")
     }
     fn visit_disp_masked(&mut self, base: RegSpec, disp: i32, mask_reg: RegSpec) -> Result<Self::Ok, Self::Error> {
         self.f.write_char('[')?;
         self.f.write_reg(base)?;
         self.f.write_char(' ')?;
-        let mut v = disp as u32;
-        if disp < 0 {
-            self.f.write_fixed_size("- 0x")?;
-            v = disp.unsigned_abs();
-        } else {
-            self.f.write_fixed_size("+ 0x")?;
-        }
-        self.f.write_u32(v)?;
+        self.f.write_displacement(disp)?;
         self.f.write_char(']')?;
         self.f.write_char('{')?;
         self.f.write_reg(mask_reg)?;
@@ -541,7 +531,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         self.f.write_fixed_size("[")?;
         self.f.write_reg(index)?;
         self.f.write_fixed_size(" * ")?;
-        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_scale(scale)?;
         self.f.write_fixed_size("]")?;
         self.f.write_char('{')?;
         self.f.write_reg(mask_reg)?;
@@ -552,16 +542,9 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         self.f.write_fixed_size("[")?;
         self.f.write_reg(index)?;
         self.f.write_fixed_size(" * ")?;
-        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_scale(scale)?;
         self.f.write_fixed_size(" ")?;
-        let mut v = disp as u32;
-        if disp < 0 {
-            self.f.write_fixed_size("- 0x")?;
-            v = disp.unsigned_abs();
-        } else {
-            self.f.write_fixed_size("+ 0x")?;
-        }
-        self.f.write_u32(v)?;
+        self.f.write_displacement(disp)?;
         self.f.write_char(']')?;
         self.f.write_char('{')?;
         self.f.write_reg(mask_reg)?;
@@ -585,14 +568,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         self.f.write_fixed_size(" + ")?;
         self.f.write_reg(index)?;
         self.f.write_fixed_size(" ")?;
-        let mut v = disp as u32;
-        if disp < 0 {
-            self.f.write_fixed_size("- 0x")?;
-            v = disp.unsigned_abs();
-        } else {
-            self.f.write_fixed_size("+ 0x")?;
-        }
-        self.f.write_u32(v)?;
+        self.f.write_displacement(disp)?;
         self.f.write_char(']')?;
         self.f.write_char('{')?;
         self.f.write_reg(mask_reg)?;
@@ -605,7 +581,7 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         self.f.write_fixed_size(" + ")?;
         self.f.write_reg(index)?;
         self.f.write_fixed_size(" * ")?;
-        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_scale(scale)?;
         self.f.write_fixed_size("]")?;
         self.f.write_char('{')?;
         self.f.write_reg(mask_reg)?;
@@ -618,16 +594,9 @@ impl <T: DisplaySink> super::OperandVisitor for DisplayingOperandVisitor<'_, T> 
         self.f.write_fixed_size(" + ")?;
         self.f.write_reg(index)?;
         self.f.write_fixed_size(" * ")?;
-        self.f.write_char((0x30 + scale) as char)?; // translate scale=1 to '1', scale=2 to '2', etc
+        self.f.write_scale(scale)?;
         self.f.write_char(' ')?;
-        let mut v = disp as u32;
-        if disp < 0 {
-            self.f.write_fixed_size("- 0x")?;
-            v = disp.unsigned_abs();
-        } else {
-            self.f.write_fixed_size("+ 0x")?;
-        }
-        self.f.write_u32(v)?;
+        self.f.write_displacement(disp)?;
         self.f.write_char(']')?;
         self.f.write_char('{')?;
         self.f.write_reg(mask_reg)?;
