@@ -9,6 +9,7 @@ use crate::long_mode::{RegSpec, Opcode, Operand, MergeMode, InstDecoder, Instruc
 
 use yaxpeax_arch::display::DisplaySink;
 use yaxpeax_arch::safer_unchecked::GetSaferUnchecked as _;
+use yaxpeax_arch::safer_unchecked::unreachable_kinda_unchecked as unreachable_unchecked;
 
 trait DisplaySinkExt {
     // `write_opcode` depends on all mnemonics being less than 32 bytes long. check that here, at
@@ -3693,15 +3694,16 @@ pub(crate) fn contextualize_intel<T: DisplaySink>(instr: &Instruction, out: &mut
             // don't worry about checking for `instr.operands[i] != Nothing`, it would be a bug to
             // reach that while iterating only to `operand_count`..
             out.write_fixed_size(", ")?;
+            // hint that accessing `inster.operands[i]` can't panic: this is useful for
+            // `instr.operands` and the segment selector check after.
             if i >= 4 {
-                unsafe { core::hint::unreachable_unchecked(); }
+                // Safety: Instruction::operands is a four-element array; operand_count is always
+                // low enough that 0..operand_count is a valid index.
+                unsafe { unreachable_unchecked(); }
             }
 
             if instr.operands[i as usize].is_memory() {
                 out.write_mem_size_label(instr.mem_size)?;
-                if i >= 4 {
-                    unsafe { core::hint::unreachable_unchecked(); }
-                }
                 if let Some(prefix) = instr.segment_override_for_op(i) {
                     let name = prefix.name();
                     out.write_char(' ')?;
